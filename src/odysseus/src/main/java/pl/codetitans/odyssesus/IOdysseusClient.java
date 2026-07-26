@@ -33,4 +33,10 @@ public interface IOdysseusClient {
 
     @NonNull
     List<OdysseusEventEntry> addAllEvents(@NonNull List<OdysseusEventEntry> events);
+
+    /**
+     * Wraps an exception (and its cause chain) into a dictionary for easier setting as a parameter in context/meta.
+     */
+    @NonNull
+    Dictionary<String, Object> wrap(@NonNull Throwable error);
 }

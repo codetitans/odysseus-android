@@ -8,6 +8,7 @@ import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Dictionary;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.UUID;
 
@@ -202,6 +203,47 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public List<OdysseusEventEntry> addAllEvents(@NonNull List<OdysseusEventEntry> events) {
         this.events.addAll(events);
         return events;
+    }
+
+    /**
+     * Wraps an exception (and its cause chain) into a dictionary for easier setting as a parameter in context/meta.
+     */
+    @Override
+    @NonNull
+    public Dictionary<String, Object> wrap(@NonNull Throwable error) {
+        final Hashtable<String, Object> d = new Hashtable<>();
+
+        d.put("type", error.getClass().getSimpleName());
+        if (error.getMessage() != null) {
+            d.put("message", error.getMessage());
+        }
+
+        final String stack = formatStackTrace(error);
+        if (!stack.isEmpty()) {
+            d.put("stack", stack);
+        }
+
+        final Throwable cause = error.getCause();
+        if (cause != null && cause != error) {
+            d.put("inner", wrap(cause));
+        }
+
+        return d;
+    }
+
+    @NonNull
+    private static String formatStackTrace(@NonNull Throwable error) {
+        final StackTraceElement[] elements = error.getStackTrace();
+        final StringBuilder sb = new StringBuilder();
+
+        for (StackTraceElement element : elements) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append("   at ").append(element);
+        }
+
+        return sb.toString();
     }
 
     @NonNull
