@@ -127,6 +127,19 @@ final class OdysseusLogger implements IOdysseusLog {
         return client.add(event);
     }
 
+    @Override
+    @NonNull
+    public OdysseusEventEntry event(@NonNull String name) {
+        return client.event(name, null, 0, null, 0, null, null, null);
+    }
+
+    @Override
+    @NonNull
+    public OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data) {
+        return client.event(name, null, 0, null, 0, null, data, null);
+    }
+
+
     @NonNull
     @Override
     public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position, @Nullable Instant timestamp, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta) {
