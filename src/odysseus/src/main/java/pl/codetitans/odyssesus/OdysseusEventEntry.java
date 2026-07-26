@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.time.Instant;
-import java.util.Dictionary;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -27,15 +27,15 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
     @NonNull
     private final Instant timestamp;
     @Nullable
-    private final Dictionary<String, Object> data;
+    private final Map<String, Object> data;
     @Nullable
-    private final Dictionary<String, Object> meta;
+    private final Map<String, Object> meta;
 
     public OdysseusEventEntry(@NonNull UUID id, @NonNull String name, short platform, @NonNull UUID sessionId,
                               int type, @Nullable UUID streamId, int position, @Nullable String user,
                               @Nullable Instant timestamp,
-                              @Nullable Dictionary<String, Object> data,
-                              @Nullable Dictionary<String, Object> meta) {
+                              @Nullable Map<String, Object> data,
+                              @Nullable Map<String, Object> meta) {
         this.id = id;
         this.name = name;
         this.platform = platform;
@@ -92,12 +92,12 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
     }
 
     @Nullable
-    public Dictionary<String, Object> getData() {
+    public Map<String, Object> getData() {
         return data;
     }
 
     @Nullable
-    public Dictionary<String, Object> getMeta() {
+    public Map<String, Object> getMeta() {
         return meta;
     }
 

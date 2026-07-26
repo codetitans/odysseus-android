@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.time.Instant;
-import java.util.Dictionary;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -32,11 +32,11 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     @NonNull
     private final Instant timestamp;
     @Nullable
-    private final Dictionary<String, Object> context;
+    private final Map<String, Object> context;
 
     public OdysseusLogEntry(@NonNull String message, @NonNull UUID sessionId, short severity,
                             @Nullable String tag, short platform, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread,
-                            @Nullable String user, @Nullable Instant timestamp, @Nullable Dictionary<String, Object> context) {
+                            @Nullable String user, @Nullable Instant timestamp, @Nullable Map<String, Object> context) {
         this.message = message;
         this.sessionId = sessionId;
         this.severity = severity;
@@ -105,7 +105,7 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     }
 
     @Nullable
-    public Dictionary<String, Object> getContext() {
+    public Map<String, Object> getContext() {
         return context;
     }
 

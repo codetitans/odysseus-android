@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.time.Instant;
-import java.util.Dictionary;
+import java.util.Map;
 import java.util.UUID;
 
 public interface IOdysseusLog {
@@ -50,7 +50,7 @@ public interface IOdysseusLog {
     OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
                          @Nullable Long thread, @Nullable Instant timestamp,
-                         @Nullable Dictionary<String, Object> context);
+                         @Nullable Map<String, Object> context);
 
     @NonNull
     OdysseusEventEntry event(@NonNull OdysseusEventEntry event);
@@ -58,6 +58,6 @@ public interface IOdysseusLog {
     @NonNull
     OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
                              @Nullable Instant timestamp,
-                             @Nullable Dictionary<String, Object> data,
-                             @Nullable Dictionary<String, Object> meta);
+                             @Nullable Map<String, Object> data,
+                             @Nullable Map<String, Object> meta);
 }

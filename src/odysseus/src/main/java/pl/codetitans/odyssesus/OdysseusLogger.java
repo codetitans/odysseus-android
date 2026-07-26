@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.time.Instant;
-import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -73,7 +72,7 @@ final class OdysseusLogger implements IOdysseusLog {
     @Override
     @Nullable
     public OdysseusLogEntry w(@Nullable Throwable ex, @NonNull String message) {
-
+        return client.log(message, LogSeverity.WARN, getTag(), null, null, null, null, null, createContextFor(ex));
     }
 
     @Nullable
@@ -85,7 +84,7 @@ final class OdysseusLogger implements IOdysseusLog {
     @Nullable
     @Override
     public OdysseusLogEntry e(@Nullable Throwable ex, @NonNull String message) {
-        return null;
+        return client.log(message, LogSeverity.ERROR, getTag(), null, null, null, null, null, createContextFor(ex));
     }
 
     @Nullable
@@ -97,7 +96,7 @@ final class OdysseusLogger implements IOdysseusLog {
     @Override
     @Nullable
     public OdysseusLogEntry c(@Nullable Throwable ex, @NonNull String message) {
-
+        return client.log(message, LogSeverity.CRITICAL, getTag(), null, null, null, null, null, createContextFor(ex));
     }
 
     private Map<String, Object> createContextFor(@Nullable Throwable error) {
@@ -118,8 +117,8 @@ final class OdysseusLogger implements IOdysseusLog {
 
     @Override
     @Nullable
-    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread, @Nullable Instant timestamp, @Nullable Dictionary<String, Object> context) {
-        return null;
+    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread, @Nullable Instant timestamp, @Nullable Map<String, Object> context) {
+        return client.log(message, severity, getTag(), file, method, line, thread, timestamp, context);
     }
 
     @Override
@@ -130,7 +129,7 @@ final class OdysseusLogger implements IOdysseusLog {
 
     @NonNull
     @Override
-    public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position, @Nullable Instant timestamp, @Nullable Dictionary<String, Object> data, @Nullable Dictionary<String, Object> meta) {
-        return null;
+    public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position, @Nullable Instant timestamp, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta) {
+        return client.event(name, id, type, streamId, position, timestamp, data, meta);
     }
 }

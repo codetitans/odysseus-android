@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.time.Instant;
-import java.util.Dictionary;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,13 +20,13 @@ public interface IOdysseusClient {
     OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String tag,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
                          @Nullable Long thread, @Nullable Instant timestamp,
-                         @Nullable Dictionary<String, Object> context);
+                         @Nullable Map<String, Object> context);
 
     @NonNull
     OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
                              @Nullable Instant timestamp,
-                             @Nullable Dictionary<String, Object> data,
-                             @Nullable Dictionary<String, Object> meta);
+                             @Nullable Map<String, Object> data,
+                             @Nullable Map<String, Object> meta);
 
     @NonNull
     List<OdysseusLogEntry> addAllLogs(@NonNull List<OdysseusLogEntry> entries);
@@ -35,8 +35,8 @@ public interface IOdysseusClient {
     List<OdysseusEventEntry> addAllEvents(@NonNull List<OdysseusEventEntry> events);
 
     /**
-     * Wraps an exception (and its cause chain) into a dictionary for easier setting as a parameter in context/meta.
+     * Wraps an exception (and its cause chain) into a map for easier setting as a parameter in context/meta.
      */
     @NonNull
-    Dictionary<String, Object> wrap(@NonNull Throwable error);
+    Map<String, Object> wrap(@NonNull Throwable error);
 }

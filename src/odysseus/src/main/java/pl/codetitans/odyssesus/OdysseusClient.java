@@ -7,9 +7,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -149,7 +149,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String tag,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
                          @Nullable Long thread, @Nullable Instant timestamp,
-                         @Nullable Dictionary<String, Object> context) {
+                         @Nullable Map<String, Object> context) {
         if (severity.getValue() < minSeverity.getValue()) {
             return null;
         }
@@ -194,8 +194,8 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @NonNull
     public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
                              @Nullable Instant timestamp,
-                             @Nullable Dictionary<String, Object> data,
-                             @Nullable Dictionary<String, Object> meta) {
+                             @Nullable Map<String, Object> data,
+                             @Nullable Map<String, Object> meta) {
 
         final OdysseusEventEntry event = new OdysseusEventEntry(id != null ? id : UUID.randomUUID(),
                 name, getPlatform(), getSessionId(), type, streamId, position, getUser(), timestamp, data, meta);
@@ -217,7 +217,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     @Override
     @NonNull
-    public Dictionary<String, Object> wrap(@NonNull Throwable error) {
+    public Map<String, Object> wrap(@NonNull Throwable error) {
         final Hashtable<String, Object> d = new Hashtable<>();
 
         d.put("type", error.getClass().getSimpleName());
@@ -236,6 +236,13 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         }
 
         return d;
+    }
+
+    /**
+     * Creates new associated and simplified logger for a given tag.
+     */
+    public IOdysseusLog create(@Nullable String tag) {
+        return new OdysseusLogger(this, tag);
     }
 
     @NonNull
