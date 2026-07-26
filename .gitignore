@@ -1,0 +1,6 @@
+# OS dummy files
+.DS_Store
+
+# IDE
+src/.idea/
+
