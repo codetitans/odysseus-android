@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Representation of the event happening inside the application.
  */
-public final class OdysseusEventEntry {
+public final class OdysseusEventEntry implements OdysseusJsonEntry {
     @NonNull
     private final UUID id;
     @NonNull
@@ -105,5 +105,22 @@ public final class OdysseusEventEntry {
     @Override
     public String toString() {
         return getId() + ": " + getName() + " [" + getType() + "]";
+    }
+
+    @Override
+    public void writeJson(@NonNull StringBuilder sb) {
+        sb.append('{');
+        sb.append("\"id\":"); OdysseusJson.writeValue(sb, id); sb.append(',');
+        sb.append("\"name\":"); OdysseusJson.writeValue(sb, name); sb.append(',');
+        sb.append("\"platform\":"); OdysseusJson.writeValue(sb, platform); sb.append(',');
+        sb.append("\"session_id\":"); OdysseusJson.writeValue(sb, sessionId); sb.append(',');
+        sb.append("\"type\":"); OdysseusJson.writeValue(sb, type); sb.append(',');
+        sb.append("\"stream_id\":"); OdysseusJson.writeValue(sb, streamId); sb.append(',');
+        sb.append("\"position\":"); OdysseusJson.writeValue(sb, position); sb.append(',');
+        sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');
+        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp); sb.append(',');
+        sb.append("\"data\":"); OdysseusJson.writeValue(sb, data); sb.append(',');
+        sb.append("\"meta\":"); OdysseusJson.writeValue(sb, meta);
+        sb.append('}');
     }
 }

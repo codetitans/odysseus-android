@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Representation of the log entry registered inside the application.
  */
-public final class OdysseusLogEntry {
+public final class OdysseusLogEntry implements OdysseusJsonEntry {
     @NonNull
     private final String message;
     @NonNull
@@ -112,5 +112,37 @@ public final class OdysseusLogEntry {
     @Override
     public String toString() {
         return getSeverity() + ": " + getMessage();
+    }
+
+    @Override
+    public void writeJson(@NonNull StringBuilder sb) {
+        sb.append('{');
+        sb.append("\"message\":"); OdysseusJson.writeValue(sb, message); sb.append(',');
+        sb.append("\"session_id\":"); OdysseusJson.writeValue(sb, sessionId); sb.append(',');
+        sb.append("\"severity\":"); OdysseusJson.writeValue(sb, severity); sb.append(',');
+        if (tag != null && !tag.isEmpty()) {
+            sb.append("\"tag\":"); OdysseusJson.writeValue(sb, tag); sb.append(',');
+        }
+        sb.append("\"platform\":"); OdysseusJson.writeValue(sb, platform); sb.append(',');
+        if (file != null && !file.isEmpty()) {
+            sb.append("\"file\":"); OdysseusJson.writeValue(sb, file); sb.append(',');
+        }
+        if (method != null && !method.isEmpty()) {
+            sb.append("\"method\":"); OdysseusJson.writeValue(sb, method); sb.append(',');
+        }
+        if (line != null) {
+            sb.append("\"line\":"); OdysseusJson.writeValue(sb, line); sb.append(',');
+        }
+        if (thread != null) {
+            sb.append("\"thread\":"); OdysseusJson.writeValue(sb, thread); sb.append(',');
+        }
+        if (user != null && !user.isEmpty()) {
+            sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');
+        }
+        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp); sb.append(',');
+        if (context != null) {
+            sb.append("\"context\":"); OdysseusJson.writeValue(sb, context);
+        }
+        sb.append('}');
     }
 }
