@@ -33,7 +33,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
 
     public OdysseusEventEntry(@NonNull UUID id, @NonNull String name, short platform, @NonNull UUID sessionId,
                               int type, @Nullable UUID streamId, int position, @Nullable String user,
-                              @NonNull Instant timestamp,
+                              @Nullable Instant timestamp,
                               @Nullable Dictionary<String, Object> data,
                               @Nullable Dictionary<String, Object> meta) {
         this.id = id;
@@ -44,7 +44,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
         this.streamId = streamId;
         this.position = position;
         this.user = user;
-        this.timestamp = timestamp;
+        this.timestamp = timestamp != null ? timestamp : Instant.now();
         this.data = data;
         this.meta = meta;
     }

@@ -14,18 +14,18 @@ public enum LogSeverity {
     CRITICAL(6, "CRITICAL"),
     ;
 
-    private final int value;
+    private final short value;
     private final String name;
 
     LogSeverity(int value, @NonNull String name) {
-        this.value = value;
+        this.value = (short) value;
         this.name = name;
     }
 
     /**
      * Gets the value of the log-level.
      */
-    public int getValue() {
+    public short getValue() {
         return value;
     }
 

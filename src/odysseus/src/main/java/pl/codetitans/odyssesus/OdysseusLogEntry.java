@@ -29,13 +29,14 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     private final Long thread;
     @Nullable
     private final String user;
+    @NonNull
     private final Instant timestamp;
     @Nullable
     private final Dictionary<String, Object> context;
 
     public OdysseusLogEntry(@NonNull String message, @NonNull UUID sessionId, short severity,
                             @Nullable String tag, short platform, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread,
-                            @Nullable String user, @NonNull Instant timestamp, @Nullable Dictionary<String, Object> context) {
+                            @Nullable String user, @Nullable Instant timestamp, @Nullable Dictionary<String, Object> context) {
         this.message = message;
         this.sessionId = sessionId;
         this.severity = severity;
@@ -46,7 +47,7 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
         this.line = line;
         this.thread = thread;
         this.user = user;
-        this.timestamp = timestamp;
+        this.timestamp = timestamp != null ? timestamp : Instant.now();
         this.context = context;
     }
 
