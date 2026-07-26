@@ -8,7 +8,7 @@ import java.util.Dictionary;
 import java.util.List;
 import java.util.UUID;
 
-public interface IOdysseusLog {
+public interface IOdysseusClient {
 
     @Nullable
     OdysseusLogEntry add(@NonNull OdysseusLogEntry entry);

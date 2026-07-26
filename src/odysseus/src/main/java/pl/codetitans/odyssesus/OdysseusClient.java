@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * Client object to provide Odysseus Logging Platform capabilities for the Android projects.
  */
-public final class OdysseusClient implements IOdysseusLog, IOdysseusSession {
+public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public static final int DEFAULT_DELAY_SECONDS = 5;
     public static final short DEFAULT_PLATFORM = 7;
 
@@ -35,12 +35,12 @@ public final class OdysseusClient implements IOdysseusLog, IOdysseusSession {
     /**
      * Initializes the instance to connect as given application, with a custom upload batching delay.
      */
-    public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform, int delaySeconds, LogSeverity minSeverity) {
+    public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform, int delaySeconds, @NonNull LogSeverity minSeverity) {
         this.logs = new OdysseusCollection<>("/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds);
         this.events = new OdysseusCollection<>("/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds);
         this.sessionId = UUID.randomUUID();
         this.platform = platform;
-        this.minSeverity = minSeverity;
+        this.minSeverity = minSeverity != null ? minSeverity : LogSeverity.DEBUG;
     }
 
     /**
