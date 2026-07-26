@@ -1,6 +1,7 @@
 package pl.codetitans.odyssesus;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 public final class OdysseusFactory {
 
@@ -32,5 +33,17 @@ public final class OdysseusFactory {
      */
     public static synchronized void stop() {
         client = null;
+    }
+
+    /**
+     * Creates new logger for a given tag and associates it with the currently initialized client.
+     */
+    public static IOdysseusLog create(@Nullable String tag) {
+        final OdysseusClient c = client;
+        if (c == null) {
+            throw new OdysseusException("Client is not initialized");
+        }
+
+        return new OdysseusLogger(c, tag);
     }
 }

@@ -79,6 +79,13 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     }
 
     /**
+     * Checks, if given severity will match and let the log be stored internally.
+     */
+    public boolean isMatching(@NonNull LogSeverity severity) {
+        return severity.getValue() >= minSeverity.getValue();
+    }
+
+    /**
      * Sets or unsets the platform identifier associated with all following log entries or events.
      */
     @Override
@@ -116,7 +123,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     @Override
     public void setSessionId(@NonNull UUID value) {
-        this.sessionId = value;
+        this.sessionId = value != null ? value : UUID.randomUUID();
     }
 
     /**
