@@ -33,9 +33,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            // Library modules should not minify themselves: shrinking is the consuming app's job,
+            // using the consumer rules bundled from src/main/keepRules. Enabling it here has no
+            // benefit and, without a matching proguardFiles entry point, previously produced an
+            // AAR with an empty classes.jar.
+            isMinifyEnabled = false
             isShrinkResources = false
-            // proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             enableUnitTestCoverage = false
             enableAndroidTestCoverage = false
         }
@@ -47,9 +50,7 @@ android {
     }
 
     publishing {
-        singleVariant("release") {
-            withSourcesJar()
-        }
+        singleVariant("release")
     }
 }
 
