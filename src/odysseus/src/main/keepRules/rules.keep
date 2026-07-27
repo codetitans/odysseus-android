@@ -4,9 +4,11 @@
 # For more details, see
 #   https://d.android.com/r/tools/r8/keep-rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# This is a client library: its public API is only ever called from consuming apps, never from
+# within the library itself, so R8 has no way to know it's "used". Keep it fully intact - not
+# stripped and not renamed - both when this module minifies itself and (via the same file, bundled
+# as a consumer rule into the AAR) when a downstream app minifies against it.
+-keep public class pl.codetitans.odyssesus.** {
+    public *;
+    protected *;
+}

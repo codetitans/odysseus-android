@@ -61,9 +61,6 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
 }
 
-// Published as pl.codetitans:odysseus:<version> to GitHub Packages.
-// AGP only registers the "release" software component after the project has been evaluated,
-// so the publication/repository setup has to be wired up in afterEvaluate.
 afterEvaluate {
     publishing {
         publications {
@@ -72,7 +69,9 @@ afterEvaluate {
 
                 groupId = "pl.codetitans"
                 artifactId = "odysseus"
-                version = project.findProperty("odysseusVersion") as String? ?: "0.0.1"
+                version = githubProperties.getProperty("odysseusVersion")
+                            ?: project.findProperty("odysseusVersion") as String?
+                                ?: "0.0.1"
             }
         }
 
