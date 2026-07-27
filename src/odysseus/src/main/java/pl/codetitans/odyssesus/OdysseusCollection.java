@@ -3,6 +3,7 @@ package pl.codetitans.odyssesus;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -39,12 +40,12 @@ final class OdysseusCollection<T extends OdysseusJsonEntry> {
     private boolean scheduled;
 
     OdysseusCollection(@NonNull String endPoint, int delaySeconds) {
-        this(DEFAULT_HOST, endPoint, delaySeconds);
+        this(null, endPoint, delaySeconds);
     }
 
-    OdysseusCollection(@NonNull String host, @NonNull String endPoint, int delaySeconds) {
+    OdysseusCollection(@Nullable String host, @NonNull String endPoint, int delaySeconds) {
         try {
-            this.baseUrl = new URL(host);
+            this.baseUrl = new URL(host == null || host.isEmpty() ? DEFAULT_HOST : host);
         } catch (MalformedURLException e) {
             throw new OdysseusException("Invalid Odysseus host: " + host, e);
         }

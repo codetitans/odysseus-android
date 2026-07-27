@@ -24,8 +24,15 @@ public final class OdysseusFactory {
     /**
      * Setup new instance the Odysseus Client.
      */
-    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, short platform, int delaySeconds, @NonNull LogSeverity minSeverity) {
-        return client = new OdysseusClient(appId, appKey, platform, delaySeconds, minSeverity);
+    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, short platform) {
+        return client = new OdysseusClient(appId, appKey, platform);
+    }
+
+    /**
+     * Setup new instance the Odysseus Client.
+     */
+    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
+        return client = new OdysseusClient(appId, appKey, delaySeconds, minSeverity, platform, host);
     }
 
     /**

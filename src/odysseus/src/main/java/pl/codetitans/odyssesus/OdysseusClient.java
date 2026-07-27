@@ -30,15 +30,22 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * Initializes the instance to connect as given application.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey) {
-        this(appId, appKey, DEFAULT_PLATFORM, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG);
+        this(appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null);
+    }
+
+    /**
+     * Initializes the instance to connect as given application.
+     */
+    public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform) {
+        this(appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null);
     }
 
     /**
      * Initializes the instance to connect as given application, with a custom upload batching delay.
      */
-    public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform, int delaySeconds, @NonNull LogSeverity minSeverity) {
-        this.logs = new OdysseusCollection<>("/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds);
-        this.events = new OdysseusCollection<>("/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds);
+    public OdysseusClient(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
+        this.logs = new OdysseusCollection<>(host, "/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds);
+        this.events = new OdysseusCollection<>(host, "/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds);
         this.sessionId = UUID.randomUUID();
         this.platform = platform;
         this.minSeverity = minSeverity != null ? minSeverity : LogSeverity.DEBUG;
