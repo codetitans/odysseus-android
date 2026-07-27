@@ -66,13 +66,13 @@ final class OdysseusLogger implements IOdysseusLog {
     @Nullable
     @Override
     public OdysseusLogEntry w(@NonNull String message) {
-        return client.log(message, LogSeverity.WARN, getTag(), null, null, null, null, null, null);
+        return client.log(message, LogSeverity.WARNING, getTag(), null, null, null, null, null, null);
     }
 
     @Override
     @Nullable
     public OdysseusLogEntry w(@Nullable Throwable ex, @NonNull String message) {
-        return client.log(message, LogSeverity.WARN, getTag(), null, null, null, null, null, createContextFor(ex));
+        return client.log(message, LogSeverity.WARNING, getTag(), null, null, null, null, null, createContextFor(ex));
     }
 
     @Nullable

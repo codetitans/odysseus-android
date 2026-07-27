@@ -9,7 +9,7 @@ public enum LogSeverity {
     DEBUG(1, "DEBUG"),
     INFO(2, "INFO"),
     SUCCESS(3, "SUCCESS"),
-    WARN(4, "WARN"),
+    WARNING(4, "WARNING"),
     ERROR(5, "ERROR"),
     CRITICAL(6, "CRITICAL"),
     ;
@@ -47,7 +47,7 @@ public enum LogSeverity {
             case 1: return DEBUG;
             case 2: return INFO;
             case 3: return SUCCESS;
-            case 4: return WARN;
+            case 4: return WARNING;
             case 5: return ERROR;
             case 6: return CRITICAL;
 
@@ -77,8 +77,8 @@ public enum LogSeverity {
         if (SUCCESS.name.equalsIgnoreCase(value)) {
             return SUCCESS;
         }
-        if (WARN.name.equalsIgnoreCase(value)) {
-            return WARN;
+        if (WARNING.name.equalsIgnoreCase(value)) {
+            return WARNING;
         }
         if (ERROR.name.equalsIgnoreCase(value)) {
             return ERROR;
