@@ -115,12 +115,20 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
         sb.append("\"platform\":"); OdysseusJson.writeValue(sb, platform); sb.append(',');
         sb.append("\"session_id\":"); OdysseusJson.writeValue(sb, sessionId); sb.append(',');
         sb.append("\"type\":"); OdysseusJson.writeValue(sb, type); sb.append(',');
-        sb.append("\"stream_id\":"); OdysseusJson.writeValue(sb, streamId); sb.append(',');
+        if (streamId != null) {
+            sb.append("\"stream_id\":"); OdysseusJson.writeValue(sb, streamId); sb.append(',');
+        }
         sb.append("\"position\":"); OdysseusJson.writeValue(sb, position); sb.append(',');
-        sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');
-        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp); sb.append(',');
-        sb.append("\"data\":"); OdysseusJson.writeValue(sb, data); sb.append(',');
-        sb.append("\"meta\":"); OdysseusJson.writeValue(sb, meta);
+        if (user != null && !user.isEmpty()) {
+            sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');
+        }
+        if (data != null) {
+            sb.append("\"data\":"); OdysseusJson.writeValue(sb, data); sb.append(',');
+        }
+        if (meta != null) {
+            sb.append("\"meta\":"); OdysseusJson.writeValue(sb, meta); sb.append(',');
+        }
+        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp);
         sb.append('}');
     }
 }

@@ -140,10 +140,10 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
         if (user != null && !user.isEmpty()) {
             sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');
         }
-        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp); sb.append(',');
         if (context != null) {
-            sb.append("\"context\":"); OdysseusJson.writeValue(sb, context);
+            sb.append("\"context\":"); OdysseusJson.writeValue(sb, context); sb.append(',');
         }
+        sb.append("\"timestamp\":"); OdysseusJson.writeValue(sb, timestamp);
         sb.append('}');
     }
 }
