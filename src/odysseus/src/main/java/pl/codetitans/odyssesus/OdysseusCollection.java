@@ -1,5 +1,7 @@
 package pl.codetitans.odyssesus;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeUnit;
  * Buffers entries in memory and periodically uploads them in batches to the Odysseus Logging Platform.
  */
 final class OdysseusCollection<T extends OdysseusJsonEntry> {
+    private static final String TAG = "OdysseusCollection";
     private static final String DEFAULT_HOST = "https://odysseus.codetitans.dev";
     private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
     private static final int READ_TIMEOUT_MILLIS = 15_000;
@@ -98,6 +101,8 @@ final class OdysseusCollection<T extends OdysseusJsonEntry> {
     }
 
     private boolean upload(@NonNull List<T> items) {
+        Log.i(TAG, "Sending OdysseusLogs[" + items.size() + "]");
+
         HttpURLConnection connection = null;
         try {
             final byte[] body = toJsonArray(items).getBytes(StandardCharsets.UTF_8);
@@ -117,6 +122,7 @@ final class OdysseusCollection<T extends OdysseusJsonEntry> {
             final int status = connection.getResponseCode();
             return status >= 200 && status < 300;
         } catch (IOException e) {
+            Log.e(TAG, "Failed to submit: " + e.getMessage());
             return false;
         } finally {
             if (connection != null) {
