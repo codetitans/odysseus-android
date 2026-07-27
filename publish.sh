@@ -1,4 +1,7 @@
 #!/bin/sh
 
-./gradlew :odysseus:publishReleasePublicationToGitHubPackagesRepository
+(
+  cd src/
+  ./gradlew :odysseus:publishReleasePublicationToGitHubPackagesRepository
+)
 

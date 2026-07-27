@@ -4,3 +4,6 @@
 # IDE
 src/.idea/
 
+# GitHub Packages credentials
+src/github.properties
+

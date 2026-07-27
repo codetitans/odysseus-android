@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.library)
     id("maven-publish")
+}
+
+val githubProperties = Properties().apply {
+    val propsFile = rootProject.file("github.properties")
+    if (propsFile.exists()) {
+        propsFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -73,8 +82,12 @@ afterEvaluate {
                 url = uri("https://maven.pkg.github.com/codetitans/odysseus-android")
 
                 credentials {
-                    username = System.getenv("GITHUB_USERNAME") ?: project.findProperty("github.username") as String?
-                    password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("github.token") as String?
+                    username = System.getenv("GITHUB_USERNAME")
+                        ?: githubProperties.getProperty("github.username")
+                        ?: project.findProperty("github.username") as String?
+                    password = System.getenv("GITHUB_TOKEN")
+                        ?: githubProperties.getProperty("github.token")
+                        ?: project.findProperty("github.token") as String?
                 }
             }
         }
