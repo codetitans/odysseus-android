@@ -3,7 +3,7 @@ package pl.codetitans.odyssesus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -117,7 +117,7 @@ final class OdysseusLogger implements IOdysseusLog {
 
     @Override
     @Nullable
-    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread, @Nullable Instant timestamp, @Nullable Map<String, Object> context) {
+    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread, @Nullable Date timestamp, @Nullable Map<String, Object> context) {
         return client.log(message, severity, getTag(), file, method, line, thread, timestamp, context);
     }
 
@@ -142,7 +142,7 @@ final class OdysseusLogger implements IOdysseusLog {
 
     @NonNull
     @Override
-    public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position, @Nullable Instant timestamp, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta) {
+    public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position, @Nullable Date timestamp, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta) {
         return client.event(name, id, type, streamId, position, timestamp, data, meta);
     }
 }

@@ -3,7 +3,7 @@ package pl.codetitans.odyssesus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.List;
 import java.util.UUID;
@@ -19,12 +19,12 @@ public interface IOdysseusClient {
     @Nullable
     OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String tag,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
-                         @Nullable Long thread, @Nullable Instant timestamp,
+                         @Nullable Long thread, @Nullable Date timestamp,
                          @Nullable Map<String, Object> context);
 
     @NonNull
     OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
-                             @Nullable Instant timestamp,
+                             @Nullable Date timestamp,
                              @Nullable Map<String, Object> data,
                              @Nullable Map<String, Object> meta);
 

@@ -3,7 +3,7 @@ package pl.codetitans.odyssesus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,16 +30,16 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     @Nullable
     private final String user;
     @NonNull
-    private final Instant timestamp;
+    private final Date timestamp;
     @Nullable
     private final Map<String, Object> context;
 
-    public OdysseusLogEntry(@NonNull String message, @NonNull UUID sessionId, short severity,
+    public OdysseusLogEntry(@NonNull String message, @NonNull UUID sessionId, LogSeverity severity,
                             @Nullable String tag, short platform, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread,
-                            @Nullable String user, @Nullable Instant timestamp, @Nullable Map<String, Object> context) {
+                            @Nullable String user, @Nullable Date timestamp, @Nullable Map<String, Object> context) {
         this.message = message;
         this.sessionId = sessionId;
-        this.severity = severity;
+        this.severity = severity.getValue();
         this.tag = tag;
         this.platform = platform;
         this.file = file;
@@ -47,7 +47,7 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
         this.line = line;
         this.thread = thread;
         this.user = user;
-        this.timestamp = timestamp != null ? timestamp : Instant.now();
+        this.timestamp = timestamp != null ? timestamp : new Date();
         this.context = context;
     }
 
@@ -100,7 +100,7 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     }
 
     @NonNull
-    public Instant getTimestamp() {
+    public Date getTimestamp() {
         return timestamp;
     }
 

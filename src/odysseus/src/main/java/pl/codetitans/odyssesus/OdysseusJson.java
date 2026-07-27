@@ -1,10 +1,13 @@
 package pl.codetitans.odyssesus;
 
-import java.time.Instant;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Dictionary;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.UUID;
 
 /**
@@ -22,8 +25,8 @@ final class OdysseusJson {
             writeString(sb, (String) value);
         } else if (value instanceof Boolean || value instanceof Number) {
             sb.append(value);
-        } else if (value instanceof UUID || value instanceof Instant) {
-            writeString(sb, value.toString());
+        } else if (value instanceof Date) {
+            writeDate(sb, (Date) value);
         } else if (value instanceof Dictionary) {
             writeDictionary(sb, (Dictionary<?, ?>) value);
         } else if (value instanceof Map) {
@@ -35,6 +38,13 @@ final class OdysseusJson {
         } else {
             writeString(sb, value.toString());
         }
+    }
+
+    private static void writeDate(StringBuilder sb, Date value) {
+        // A new instance per call, since SimpleDateFormat is not thread-safe.
+        final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        format.setTimeZone(TimeZone.getTimeZone("GMT"));
+        writeString(sb, format.format(value));
     }
 
     private static void writeDictionary(StringBuilder sb, Dictionary<?, ?> dict) {

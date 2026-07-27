@@ -3,7 +3,7 @@ package pl.codetitans.odyssesus;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,7 +25,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
     @Nullable
     private final String user;
     @NonNull
-    private final Instant timestamp;
+    private final Date timestamp;
     @Nullable
     private final Map<String, Object> data;
     @Nullable
@@ -33,7 +33,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
 
     public OdysseusEventEntry(@NonNull UUID id, @NonNull String name, short platform, @NonNull UUID sessionId,
                               int type, @Nullable UUID streamId, int position, @Nullable String user,
-                              @Nullable Instant timestamp,
+                              @Nullable Date timestamp,
                               @Nullable Map<String, Object> data,
                               @Nullable Map<String, Object> meta) {
         this.id = id;
@@ -44,7 +44,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
         this.streamId = streamId;
         this.position = position;
         this.user = user;
-        this.timestamp = timestamp != null ? timestamp : Instant.now();
+        this.timestamp = timestamp != null ? timestamp : new Date();
         this.data = data;
         this.meta = meta;
     }
@@ -87,7 +87,7 @@ public final class OdysseusEventEntry implements OdysseusJsonEntry {
     }
 
     @NonNull
-    public Instant getTimestamp() {
+    public Date getTimestamp() {
         return timestamp;
     }
 

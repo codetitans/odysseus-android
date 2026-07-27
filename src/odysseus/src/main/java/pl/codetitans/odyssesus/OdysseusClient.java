@@ -5,8 +5,8 @@ import androidx.annotation.Nullable;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
@@ -148,13 +148,13 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @Nullable
     public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String tag,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
-                         @Nullable Long thread, @Nullable Instant timestamp,
+                         @Nullable Long thread, @Nullable Date timestamp,
                          @Nullable Map<String, Object> context) {
         if (severity.getValue() < minSeverity.getValue()) {
             return null;
         }
 
-        final OdysseusLogEntry entry = new OdysseusLogEntry(message, getSessionId(), severity.getValue(), tag, getPlatform(),
+        final OdysseusLogEntry entry = new OdysseusLogEntry(message, getSessionId(), severity, tag, getPlatform(),
                 file, method, line, thread, getUser(), timestamp, context);
         this.logs.add(entry);
         return entry;
@@ -193,7 +193,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @Override
     @NonNull
     public OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
-                             @Nullable Instant timestamp,
+                             @Nullable Date timestamp,
                              @Nullable Map<String, Object> data,
                              @Nullable Map<String, Object> meta) {
 
