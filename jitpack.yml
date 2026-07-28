@@ -2,7 +2,7 @@ jdk:
   - openjdk21
 
 before_install:
-  - cd src
+  - echo "Starting..."
 
 install:
   - ./gradlew :odysseus:publishToMavenLocal --no-daemon --stacktrace

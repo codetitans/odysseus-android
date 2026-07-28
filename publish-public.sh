@@ -1,7 +1,4 @@
 #!/bin/sh
 
-(
-  cd src/
-  ./gradlew :odysseus:publishMavenCentralPublicationToSonatypeCentralRepository
-)
+./gradlew :odysseus:publishMavenCentralPublicationToSonatypeCentralRepository
 
