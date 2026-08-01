@@ -155,14 +155,14 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @Nullable
     public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String tag,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
-                         @Nullable Long thread, @Nullable Date timestamp,
+                         @Nullable Long thread, @Nullable String threadName, @Nullable Date timestamp,
                          @Nullable Map<String, Object> context) {
         if (severity.getValue() < minSeverity.getValue()) {
             return null;
         }
 
         final OdysseusLogEntry entry = new OdysseusLogEntry(message, getSessionId(), severity, tag, getPlatform(),
-                file, method, line, thread, getUser(), timestamp, context);
+                file, method, line, thread, threadName, getUser(), timestamp, context);
         this.logs.add(entry);
         return entry;
     }

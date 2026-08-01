@@ -42,63 +42,69 @@ final class OdysseusLogger implements IOdysseusLog {
     @Nullable
     @Override
     public OdysseusLogEntry t(@NonNull String message) {
-        return client.log(message, LogSeverity.TRACE, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.TRACE, null);
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry d(@NonNull String message) {
-        return client.log(message, LogSeverity.DEBUG, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.DEBUG, null);
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry i(@NonNull String message) {
-        return client.log(message, LogSeverity.INFO, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.INFO, null);
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry s(@NonNull String message) {
-        return client.log(message, LogSeverity.SUCCESS, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.SUCCESS, null);
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry w(@NonNull String message) {
-        return client.log(message, LogSeverity.WARNING, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.WARNING, null);
     }
 
     @Override
     @Nullable
     public OdysseusLogEntry w(@Nullable Throwable ex, @NonNull String message) {
-        return client.log(message, LogSeverity.WARNING, getTag(), null, null, null, null, null, createContextFor(ex));
+        return log(message, LogSeverity.WARNING, createContextFor(ex));
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry e(@NonNull String message) {
-        return client.log(message, LogSeverity.ERROR, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.ERROR, null);
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry e(@Nullable Throwable ex, @NonNull String message) {
-        return client.log(message, LogSeverity.ERROR, getTag(), null, null, null, null, null, createContextFor(ex));
+        return log(message, LogSeverity.ERROR, createContextFor(ex));
     }
 
     @Nullable
     @Override
     public OdysseusLogEntry c(@NonNull String message) {
-        return client.log(message, LogSeverity.CRITICAL, getTag(), null, null, null, null, null, null);
+        return log(message, LogSeverity.CRITICAL, null);
     }
 
     @Override
     @Nullable
     public OdysseusLogEntry c(@Nullable Throwable ex, @NonNull String message) {
-        return client.log(message, LogSeverity.CRITICAL, getTag(), null, null, null, null, null, createContextFor(ex));
+        return log(message, LogSeverity.CRITICAL, createContextFor(ex));
     }
 
+    @Nullable
+    private OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable Map<String, Object> context) {
+        return client.log(message, severity, getTag(), null, null, null, null, null, new Date(), context);
+    }
+
+    @Nullable
     private Map<String, Object> createContextFor(@Nullable Throwable error) {
         if (error == null) {
             return null;
@@ -117,8 +123,9 @@ final class OdysseusLogger implements IOdysseusLog {
 
     @Override
     @Nullable
-    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread, @Nullable Date timestamp, @Nullable Map<String, Object> context) {
-        return client.log(message, severity, getTag(), file, method, line, thread, timestamp, context);
+    public OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity, @Nullable String file, @Nullable String method, @Nullable Long line,
+                                @Nullable Long thread, @Nullable String threadName, @Nullable Date timestamp, @Nullable Map<String, Object> context) {
+        return client.log(message, severity, getTag(), file, method, line, thread, threadName, timestamp, context);
     }
 
     @Override

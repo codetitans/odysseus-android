@@ -28,6 +28,8 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     @Nullable
     private final Long thread;
     @Nullable
+    private final String threadName;
+    @Nullable
     private final String user;
     @NonNull
     private final Date timestamp;
@@ -35,7 +37,8 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     private final Map<String, Object> context;
 
     public OdysseusLogEntry(@NonNull String message, @NonNull UUID sessionId, LogSeverity severity,
-                            @Nullable String tag, short platform, @Nullable String file, @Nullable String method, @Nullable Long line, @Nullable Long thread,
+                            @Nullable String tag, short platform, @Nullable String file, @Nullable String method, @Nullable Long line,
+                            @Nullable Long thread, @Nullable String threadName,
                             @Nullable String user, @Nullable Date timestamp, @Nullable Map<String, Object> context) {
         this.message = message;
         this.sessionId = sessionId;
@@ -46,6 +49,7 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
         this.method = method;
         this.line = line;
         this.thread = thread;
+        this.threadName = threadName;
         this.user = user;
         this.timestamp = timestamp != null ? timestamp : new Date();
         this.context = context;
@@ -95,6 +99,11 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
     }
 
     @Nullable
+    public String getThreadName() {
+        return threadName;
+    }
+
+    @Nullable
     public String getUser() {
         return user;
     }
@@ -136,6 +145,9 @@ public final class OdysseusLogEntry implements OdysseusJsonEntry {
         }
         if (thread != null) {
             sb.append("\"thread\":"); OdysseusJson.writeValue(sb, thread); sb.append(',');
+        }
+        if (threadName != null && !threadName.isEmpty()) {
+            sb.append("\"thread_name\":"); OdysseusJson.writeValue(sb, threadName); sb.append(',');
         }
         if (user != null && !user.isEmpty()) {
             sb.append("\"user\":"); OdysseusJson.writeValue(sb, user); sb.append(',');

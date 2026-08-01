@@ -49,7 +49,7 @@ public interface IOdysseusLog {
     @Nullable
     OdysseusLogEntry log(@NonNull String message, @NonNull LogSeverity severity,
                          @Nullable String file, @Nullable String method, @Nullable Long line,
-                         @Nullable Long thread, @Nullable Date timestamp,
+                         @Nullable Long thread, @Nullable String threadName, @Nullable Date timestamp,
                          @Nullable Map<String, Object> context);
 
     @NonNull
