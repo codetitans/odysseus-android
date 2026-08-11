@@ -64,7 +64,8 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
 }
 
-val libraryVersion: String = codetitansProperties.getProperty("odysseusVersion")
+val libraryVersion: String = System.getenv("ODYSSEUS_VERSION")
+    ?: codetitansProperties.getProperty("odysseusVersion")
     ?: project.findProperty("odysseusVersion") as String?
     ?: "0.0.1"
 

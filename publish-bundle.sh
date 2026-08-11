@@ -2,10 +2,12 @@
 
 version=${1:-0.0.9}
 bundle_name=odysseus-$version-bundle.zip
+bundle_path=bundle/pl/codetitans/odysseus/
+repo_path=~/.m2/repository/pl/codetitans/odysseus/$version/
 
 echo Building...
 rm -rf ~/.m2/repository/pl/codetitans/odysseus/$version/
-./gradlew :odysseus:publishMavenCentralPublicationToMavenLocal
+ODYSSEUS_VERSION=$version ./gradlew :odysseus:publishMavenCentralPublicationToMavenLocal
 
 ######################
 
@@ -35,18 +37,18 @@ generate_checksums() {
 
 echo Copying artifacts...
 rm -rf bundle/
-mkdir -p bundle/pl/codetitans/odysseus/
-cp -r ~/.m2/repository/pl/codetitans/odysseus/$version/ bundle/pl/codetitans/odysseus/$version/
+mkdir -p "$bundle_path"
+cp -r "$repo_path" "$bundle_path/$version/"
 
 # generate checksums
 echo Generating checksums...
-generate_checksums bundle/pl/codetitans/odysseus/$version/
+generate_checksums "$bundle_path/$version/"
 
 # create a bundle
-echo Creating bundle...
-rm $bundle_name
+echo Creating bundle "$bundle_name"...
+rm -f $bundle_name
 (
   cd bundle/
-  zip -r -X ../$bundle_name pl/ -x '*.DS_Store'
+  zip -r -X "../$bundle_name" pl/ -x '*.DS_Store'
 )
 
