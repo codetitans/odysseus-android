@@ -1,4 +1,4 @@
 #!/bin/sh
 
-./gradlew :odysseus:publishMavenCentralPublicationToSonatypeCentralRepository
+./gradlew :odysseus:publishMavenCentralPublicationToSonatypeCentralRepository --no-configuration-cache
 

@@ -71,12 +71,12 @@ val libraryVersion: String = codetitansProperties.getProperty("odysseusVersion")
 // Maven Central mandates sources + javadoc artifacts. They're only attached to the "mavenCentral"
 // publication below (on top of the "release" component), so the GitHub Packages publication stays
 // AAR-only.
-val sourcesJar by tasks.registering(Jar::class) {
+val sourcesJar = tasks.register<Jar>("sourcesJar") {
     archiveClassifier.set("sources")
     from("src/main/java")
 }
 
-val javadocJar by tasks.registering(Jar::class) {
+val javadocJar = tasks.register<Jar>("javadocJar") {
     archiveClassifier.set("javadoc")
     // Placeholder: Central only validates that this artifact exists. Wire up a real Javadoc task
     // here if generated API docs are wanted later.
