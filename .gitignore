@@ -8,6 +8,9 @@
 github.properties
 codetitans.properties
 
+# public releases
+bundle/
+odysseus-*-bundle.zip
 
 # others
 *.iml
