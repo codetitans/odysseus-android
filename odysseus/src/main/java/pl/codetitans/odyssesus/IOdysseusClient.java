@@ -39,4 +39,16 @@ public interface IOdysseusClient {
      */
     @NonNull
     Map<String, Object> wrap(@NonNull Throwable error);
+
+    /**
+     * Captures details about the currently running app.
+     */
+    @NonNull
+    Map<String, Object> captureAppInfo(@Nullable Map<String, Object> extra);
+
+    /**
+     * Captures details about the current device.
+     */
+    @NonNull
+    Map<String, Object> captureDeviceInfo(@Nullable Map<String, Object> extra);
 }

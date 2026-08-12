@@ -2,6 +2,7 @@ package pl.codetitans.odyssesus;
 
 import android.content.Context;
 import android.os.Process;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -20,6 +21,7 @@ import java.util.UUID;
  * Client object to provide Odysseus Logging Platform capabilities for the Android projects.
  */
 public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
+    private static final String TAG = "OdysseusClient";
     public static final int DEFAULT_DELAY_SECONDS = 5;
     public static final short DEFAULT_PLATFORM = 7;
     private static final String PENDING_STORE_DIR = "odysseus-pending";
@@ -27,6 +29,8 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     private UUID sessionId;
     private final OdysseusCollection logs;
     private final OdysseusCollection events;
+    @Nullable
+    private final Context appContext;
     private String user;
     private short platform;
     private LogSeverity minSeverity;
@@ -95,6 +99,10 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
                 storageDir != null ? new File(storageDir, "pending-logs.jsonl") : null);
         this.events = new OdysseusCollection(host, "/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds,
                 storageDir != null ? new File(storageDir, "pending-events.jsonl") : null);
+        // The application context, never whatever short-lived Activity/Service context was passed
+        // in, so this can't leak - it's only used later for captureAppInfo()/captureDeviceInfo().
+        final Context applicationContext = context != null ? context.getApplicationContext() : null;
+        this.appContext = applicationContext != null ? applicationContext : context;
         this.sessionId = UUID.randomUUID();
         this.platform = platform;
         this.minSeverity = minSeverity;
@@ -303,6 +311,50 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         }
 
         return d;
+    }
+
+    /**
+     * Captures details about the currently running app (version, install origin, debug/release
+     * build, ...) - see {@link OdysseusDeviceInfo#captureAppInfo}. Requires a {@code Context} to
+     * have been supplied at construction time; otherwise returns just {@code extra} (or an empty
+     * map), with a warning logged.
+     */
+    @Override
+    @NonNull
+    public Map<String, Object> captureAppInfo(@Nullable Map<String, Object> extra) {
+        final Map<String, Object> info = appContext != null
+                ? OdysseusDeviceInfo.captureAppInfo(appContext)
+                : missingContext("captureAppInfo");
+
+        if (extra != null) {
+            info.putAll(extra);
+        }
+        return info;
+    }
+
+    /**
+     * Captures details about the current device (hardware/OS, screen, memory, storage, battery,
+     * ...) - see {@link OdysseusDeviceInfo#captureDeviceInfo}. Requires a {@code Context} to have
+     * been supplied at construction time; otherwise returns just {@code extra} (or an empty map),
+     * with a warning logged.
+     */
+    @Override
+    @NonNull
+    public Map<String, Object> captureDeviceInfo(@Nullable Map<String, Object> extra) {
+        final Map<String, Object> info = appContext != null
+                ? OdysseusDeviceInfo.captureDeviceInfo(appContext)
+                : missingContext("captureDeviceInfo");
+
+        if (extra != null) {
+            info.putAll(extra);
+        }
+        return info;
+    }
+
+    @NonNull
+    private static Map<String, Object> missingContext(@NonNull String method) {
+        Log.w(TAG, method + "() called without a Context - construct the client with a Context to capture this");
+        return new Hashtable<>();
     }
 
     /**
