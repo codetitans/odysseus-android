@@ -1,8 +1,12 @@
 package pl.codetitans.odyssesus;
 
+import android.content.Context;
+import android.os.Process;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -18,37 +22,86 @@ import java.util.UUID;
 public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public static final int DEFAULT_DELAY_SECONDS = 5;
     public static final short DEFAULT_PLATFORM = 7;
+    private static final String PENDING_STORE_DIR = "odysseus-pending";
 
     private UUID sessionId;
-    private final OdysseusCollection<OdysseusLogEntry> logs;
-    private final OdysseusCollection<OdysseusEventEntry> events;
+    private final OdysseusCollection logs;
+    private final OdysseusCollection events;
     private String user;
     private short platform;
     private LogSeverity minSeverity;
+    @Nullable
+    private Thread.UncaughtExceptionHandler installedCrashHandler;
+    @Nullable
+    private Thread.UncaughtExceptionHandler previousCrashHandler;
 
     /**
      * Initializes the instance to connect as given application.
+     * <p>
+     * Unsubmitted entries only live in memory with this overload: if the process dies before they
+     * are uploaded, they are lost. Prefer the {@link Context}-accepting constructors, which
+     * persist unsubmitted entries to disk and automatically retry them on the next launch.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey) {
-        this(appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null);
     }
 
     /**
-     * Initializes the instance to connect as given application.
+     * Initializes the instance to connect as given application. See the in-memory-only caveat on
+     * {@link #OdysseusClient(String, String)}.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform) {
-        this(appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null);
     }
 
     /**
-     * Initializes the instance to connect as given application, with a custom upload batching delay.
+     * Initializes the instance to connect as given application, with a custom upload batching
+     * delay. See the in-memory-only caveat on {@link #OdysseusClient(String, String)}.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
-        this.logs = new OdysseusCollection<>(host, "/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds);
-        this.events = new OdysseusCollection<>(host, "/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds);
+        this(null, appId, appKey, delaySeconds, minSeverity, platform, host);
+    }
+
+    /**
+     * Initializes the instance to connect as given application. Unsubmitted log entries and
+     * events are persisted to disk (under {@code context}'s no-backup storage) and are
+     * automatically retried the next time a client is constructed with the same {@code appId}/
+     * {@code appKey} - including across app restarts after a crash or lost network connection.
+     * Also installs an uncaught-exception handler that logs the crash (with stack trace) as a
+     * {@link LogSeverity#CRITICAL} entry before chaining to whatever handler was previously
+     * installed, so no crash goes unrecorded.
+     */
+    public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey) {
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null);
+    }
+
+    /**
+     * Initializes the instance to connect as given application. See {@link #OdysseusClient(Context, String, String)}.
+     */
+    public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey, short platform) {
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null);
+    }
+
+    /**
+     * Full-control constructor. See {@link #OdysseusClient(Context, String, String)}.
+     * <p>
+     * Pass {@code context = null} to fall back to the in-memory-only behavior described on
+     * {@link #OdysseusClient(String, String)} (used internally by the no-{@code Context}
+     * overloads of this constructor).
+     */
+    public OdysseusClient(@Nullable Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
+        final File storageDir = context != null ? resolveStorageDir(context) : null;
+        this.logs = new OdysseusCollection(host, "/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds,
+                storageDir != null ? new File(storageDir, "pending-logs.jsonl") : null);
+        this.events = new OdysseusCollection(host, "/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds,
+                storageDir != null ? new File(storageDir, "pending-events.jsonl") : null);
         this.sessionId = UUID.randomUUID();
         this.platform = platform;
-        this.minSeverity = minSeverity != null ? minSeverity : LogSeverity.DEBUG;
+        this.minSeverity = minSeverity;
+
+        if (context != null) {
+            installCrashHandler();
+        }
     }
 
     /**
@@ -144,7 +197,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
             return null;
         }
 
-        this.logs.add(entry);
+        this.logs.add(toJson(entry));
         return entry;
     }
 
@@ -163,7 +216,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
 
         final OdysseusLogEntry entry = new OdysseusLogEntry(message, getSessionId(), severity, tag, getPlatform(),
                 file, method, line, thread, threadName, getUser(), timestamp, context);
-        this.logs.add(entry);
+        this.logs.add(toJson(entry));
         return entry;
     }
 
@@ -174,14 +227,16 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @NonNull
     public List<OdysseusLogEntry> addAllLogs(@NonNull List<OdysseusLogEntry> entries) {
         final List<OdysseusLogEntry> accepted = new ArrayList<>();
+        final List<String> json = new ArrayList<>();
 
         for (OdysseusLogEntry entry : entries) {
             if (entry.getSeverity() >= minSeverity.getValue()) {
                 accepted.add(entry);
+                json.add(toJson(entry));
             }
         }
 
-        this.logs.addAll(accepted);
+        this.logs.addAll(json);
         return accepted;
     }
 
@@ -190,7 +245,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     @NonNull
     public OdysseusEventEntry add(@NonNull OdysseusEventEntry event) {
-        this.events.add(event);
+        this.events.add(toJson(event));
         return event;
     }
 
@@ -206,7 +261,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
 
         final OdysseusEventEntry event = new OdysseusEventEntry(id != null ? id : UUID.randomUUID(),
                 name, getPlatform(), getSessionId(), type, streamId, position, getUser(), timestamp, data, meta);
-        this.events.add(event);
+        this.events.add(toJson(event));
         return event;
     }
 
@@ -215,7 +270,12 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     @NonNull
     public List<OdysseusEventEntry> addAllEvents(@NonNull List<OdysseusEventEntry> events) {
-        this.events.addAll(events);
+        final List<String> json = new ArrayList<>();
+        for (OdysseusEventEntry event : events) {
+            json.add(toJson(event));
+        }
+
+        this.events.addAll(json);
         return events;
     }
 
@@ -250,6 +310,69 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     public IOdysseusLog create(@Nullable String tag) {
         return new OdysseusLogger(this, tag);
+    }
+
+    /**
+     * Restores whatever uncaught-exception handler was installed before this client's, if this
+     * client is still the currently active one. Called by {@link OdysseusFactory#stop()}.
+     */
+    void shutdown() {
+        if (installedCrashHandler != null && Thread.getDefaultUncaughtExceptionHandler() == installedCrashHandler) {
+            Thread.setDefaultUncaughtExceptionHandler(previousCrashHandler);
+        }
+    }
+
+    /**
+     * Chains an uncaught-exception handler in front of whichever one is currently installed
+     * (never replaces it outright), so a crash still gets recorded as a CRITICAL log entry - with
+     * its stack trace, via {@link #wrap} - even though there's no time left for an HTTP upload;
+     * the entry is durably queued on disk instead and retried on the next launch.
+     */
+    private void installCrashHandler() {
+        previousCrashHandler = Thread.getDefaultUncaughtExceptionHandler();
+        installedCrashHandler = (thread, error) -> {
+            try {
+                final Map<String, Object> context = new Hashtable<>();
+                context.put("exception", wrap(error));
+
+                final String message = error.getMessage() != null ? error.getMessage() : error.getClass().getName();
+                add(new OdysseusLogEntry(message, getSessionId(), LogSeverity.CRITICAL, "CRASH", getPlatform(),
+                        null, null, null, threadId(thread), thread.getName(), getUser(), new Date(), context));
+            } catch (Throwable ignored) {
+                // never let crash-reporting itself crash the crash handler
+            } finally {
+                if (previousCrashHandler != null) {
+                    previousCrashHandler.uncaughtException(thread, error);
+                } else {
+                    Process.killProcess(Process.myPid());
+                    System.exit(10);
+                }
+            }
+        };
+        Thread.setDefaultUncaughtExceptionHandler(installedCrashHandler);
+    }
+
+    // Thread.getId() is deprecated in favor of threadId(), but that replacement only exists from
+    // API 35 - minSdk here is 23, so the deprecated call is the only option and is deliberate.
+    @SuppressWarnings("deprecation")
+    private static long threadId(@NonNull Thread thread) {
+        return thread.getId();
+    }
+
+    @NonNull
+    private static File resolveStorageDir(@NonNull Context context) {
+        File base = context.getNoBackupFilesDir();
+        if (base == null) {
+            base = context.getFilesDir();
+        }
+        return new File(base, PENDING_STORE_DIR);
+    }
+
+    @NonNull
+    private static String toJson(@NonNull OdysseusJsonEntry entry) {
+        final StringBuilder sb = new StringBuilder();
+        entry.writeJson(sb);
+        return sb.toString();
     }
 
     @NonNull
