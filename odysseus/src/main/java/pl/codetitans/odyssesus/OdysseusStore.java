@@ -35,9 +35,14 @@ import java.util.List;
  * <p>
  * This class only manages storage - it knows nothing about the network. Callers hand a batch off
  * via {@link #takeBatch} and report the outcome back via {@link #confirmSent} or {@link #requeue}.
+ * <p>
+ * At most {@link #MAX_ENTRIES} entries are ever held (in memory and on disk combined) - if adding
+ * more would exceed that, the oldest entries are dropped to make room, so a very long stretch
+ * without a connection can't grow the pending queue (or the file backing it) without bound.
  */
 final class OdysseusStore {
     private static final String TAG = "OdysseusStore";
+    private static final int MAX_ENTRIES = 2_000;
 
     private final Object lock = new Object();
     private final List<String> entries = new ArrayList<>();
@@ -58,6 +63,7 @@ final class OdysseusStore {
             synchronized (lock) {
                 entries.addAll(recovered);
                 persistedCount = recovered.size(); // already on disk - it's where we just read them from
+                enforceLimit();
             }
         }
     }
@@ -65,6 +71,7 @@ final class OdysseusStore {
     void add(@NonNull String json) {
         synchronized (lock) {
             entries.add(json);
+            enforceLimit();
         }
     }
 
@@ -75,6 +82,7 @@ final class OdysseusStore {
 
         synchronized (lock) {
             entries.addAll(items);
+            enforceLimit();
         }
     }
 
@@ -132,7 +140,29 @@ final class OdysseusStore {
 
             entries.addAll(0, batch.items);
             persistedCount = batch.items.size();
+            enforceLimit();
         }
+    }
+
+    // must be called while already holding `lock`
+    private void enforceLimit() {
+        final int overflow = entries.size() - MAX_ENTRIES;
+        if (overflow <= 0) {
+            return;
+        }
+
+        // Drop the oldest `overflow` entries to make room. If any of them were already durably
+        // persisted, trim the same count from the front of the file too, so it stays in lock-step
+        // with memory instead of accumulating entries we've decided to discard.
+        final int droppedPersisted = Math.min(overflow, persistedCount);
+        if (droppedPersisted > 0) {
+            removeFirstLines(walFile, droppedPersisted);
+        }
+
+        entries.subList(0, overflow).clear();
+        persistedCount = Math.max(0, persistedCount - overflow);
+
+        Log.w(TAG, "Pending queue exceeded " + MAX_ENTRIES + " entries - dropped the oldest " + overflow);
     }
 
     /**
