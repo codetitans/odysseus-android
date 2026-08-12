@@ -5,50 +5,31 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Buffers pre-serialized JSON entries in memory and periodically uploads them in batches to the
- * Odysseus Logging Platform.
+ * Periodically uploads batches of entries to the Odysseus Logging Platform over HTTP.
  * <p>
- * When constructed with a write-ahead file, entries are durably persisted to that file - in
- * batches, not one write per {@link #add}/{@link #addAll} call, since that would mean one disk
- * write per log line - and are only removed from it once their batch has been confirmed uploaded.
- * That way, entries survive the process dying (crash, kill, no network) before a batch could be
- * sent - the next {@code OdysseusCollection} created against the same file (i.e. on the next app
- * launch) picks them back up and retries automatically.
- * <p>
- * Persistence is coalesced two ways: a short debounce ({@link #PERSIST_DEBOUNCE_MILLIS}) batches
- * bursts of adds into a single write, and a per-entry {@link #flush} always persists whatever's
- * still unwritten right before it uploads - so the on-disk copy is never more than one short
- * debounce (or one upload cycle, whichever is sooner) behind memory. A size-based fallback
- * ({@link #PERSIST_MAX_BUFFERED}) also forces an early write if a burst of adds outruns the
- * debounce, bounding both memory use and the worst-case loss window.
+ * Entry storage/persistence is entirely delegated to {@link OdysseusStore} - this class only
+ * decides when to attempt an upload and does the actual network call, handing a batch to the
+ * store's {@link OdysseusStore#takeBatch()} and reporting the outcome back via
+ * {@link OdysseusStore#confirmSent}/{@link OdysseusStore#requeue}.
  */
 final class OdysseusCollection {
     private static final String TAG = "OdysseusCollection";
     private static final String DEFAULT_HOST = "https://odysseus.codetitans.dev";
     private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
     private static final int READ_TIMEOUT_MILLIS = 15_000;
-    private static final long PERSIST_DEBOUNCE_MILLIS = 2_000;
-    private static final int PERSIST_MAX_BUFFERED = 200;
 
     private static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor(runnable -> {
         final Thread thread = new Thread(runnable, "OdysseusUploader");
@@ -57,16 +38,11 @@ final class OdysseusCollection {
     });
 
     private final Object lock = new Object();
-    private final List<String> entries = new ArrayList<>();
+    private final OdysseusStore store;
     private final URL baseUrl;
     private final String endPoint;
     private final int delaySeconds;
-    @Nullable
-    private final File walFile;
     private boolean scheduled;
-    private boolean persistScheduled;
-    // entries[0, persistedCount) are already durably written to walFile; the rest is only in memory.
-    private int persistedCount;
 
     OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walFile) {
         this(null, endPoint, delaySeconds, walFile);
@@ -81,27 +57,17 @@ final class OdysseusCollection {
 
         this.endPoint = endPoint;
         this.delaySeconds = Math.max(delaySeconds, 1);
-        this.walFile = walFile;
+        this.store = new OdysseusStore(walFile);
 
-        // Recover anything left over from a previous process (crash, kill, no network, ...) - this
-        // is the only place recovery needs to happen, since from here on the file and the
-        // in-memory queue are always kept in lock-step by add()/addAll()/persist()/flush().
-        final List<String> recovered = readAllLines(walFile);
-        if (!recovered.isEmpty()) {
-            Log.i(TAG, "Recovered " + recovered.size() + " unsent entries from a previous session");
-            synchronized (lock) {
-                entries.addAll(recovered);
-                persistedCount = recovered.size(); // already on disk - it's where we just read them from
-                scheduleFlush();
-            }
+        // pick up anything the store recovered from a previous session
+        if (store.hasPending()) {
+            scheduleFlush();
         }
     }
 
     void add(@NonNull String json) {
-        synchronized (lock) {
-            entries.add(json);
-            onEntriesAdded();
-        }
+        store.add(json);
+        scheduleFlush();
     }
 
     void addAll(@NonNull List<String> items) {
@@ -109,92 +75,38 @@ final class OdysseusCollection {
             return;
         }
 
-        synchronized (lock) {
-            entries.addAll(items);
-            onEntriesAdded();
-        }
-    }
-
-    // must be called while already holding `lock`
-    private void onEntriesAdded() {
-        if (entries.size() - persistedCount >= PERSIST_MAX_BUFFERED) {
-            // a burst outran the debounce below - write now rather than let unpersisted entries
-            // (and the loss window they represent) grow unbounded
-            persistPending();
-        } else {
-            schedulePersist();
-        }
+        store.addAll(items);
         scheduleFlush();
     }
 
-    // must be called while already holding `lock`
-    private void schedulePersist() {
-        if (!persistScheduled) {
-            persistScheduled = true;
-            EXECUTOR.schedule(this::persistPendingTick, PERSIST_DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void persistPendingTick() {
-        synchronized (lock) {
-            persistScheduled = false;
-            persistPending();
-        }
-    }
-
-    // must be called while already holding `lock`
-    private void persistPending() {
-        if (persistedCount < entries.size()) {
-            appendLines(walFile, entries.subList(persistedCount, entries.size()));
-            persistedCount = entries.size();
-        }
-    }
-
     private void scheduleFlush() {
-        if (!scheduled) {
-            scheduled = true;
-            EXECUTOR.schedule(this::flush, delaySeconds, TimeUnit.SECONDS);
+        synchronized (lock) {
+            if (!scheduled) {
+                scheduled = true;
+                EXECUTOR.schedule(this::flush, delaySeconds, TimeUnit.SECONDS);
+            }
         }
     }
 
     private void flush() {
-        final List<String> toUpload;
         synchronized (lock) {
-            // whatever's about to be uploaded must be durable first, regardless of whether the
-            // debounce timer has fired yet
-            persistPending();
-
-            toUpload = new ArrayList<>(entries);
-            entries.clear();
-            persistedCount = 0;
             scheduled = false;
         }
 
+        final List<String> toUpload = store.takeBatch();
         if (toUpload.isEmpty()) {
             return;
         }
 
         if (upload(toUpload)) {
-            // Only the first toUpload.size() lines belong to this batch - anything appended to
-            // the file while the upload was in flight (a concurrent add()) must be kept.
-            synchronized (lock) {
-                removeFirstLines(walFile, toUpload.size());
-            }
+            store.confirmSent(toUpload);
         } else {
-            // Put the entries back at the front of the queue and retry on the next flush. The WAL
-            // file already holds them (persistPending() above guaranteed that) plus anything added
-            // meanwhile, so the file itself needs no change - just extend the persisted prefix to
-            // cover the entries we just put back in front of it.
-            synchronized (lock) {
-                entries.addAll(0, toUpload);
-                persistedCount += toUpload.size();
-            }
+            // retried on a later flush - store already knows how to put it back durably
+            store.requeue(toUpload);
         }
 
-        synchronized (lock) {
-            if (!entries.isEmpty()) {
-                scheduleFlush();
-            }
+        if (store.hasPending()) {
+            scheduleFlush();
         }
     }
 
@@ -241,91 +153,5 @@ final class OdysseusCollection {
         }
         sb.append(']');
         return sb.toString();
-    }
-
-    // --- Write-ahead file persistence, so unsent entries survive the process dying -----------
-
-    private static void appendLines(@Nullable File file, @NonNull List<String> lines) {
-        if (file == null) {
-            return;
-        }
-
-        try {
-            final File parent = file.getParentFile();
-            if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
-                throw new IOException("Could not create " + parent);
-            }
-
-            try (BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(new FileOutputStream(file, true), StandardCharsets.UTF_8))) {
-                for (String line : lines) {
-                    writer.write(line);
-                    writer.newLine();
-                }
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to persist pending entries: " + e.getMessage());
-        }
-    }
-
-    private static void removeFirstLines(@Nullable File file, int count) {
-        if (file == null || count <= 0 || !file.exists()) {
-            return;
-        }
-
-        try {
-            final List<String> remaining = new ArrayList<>();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-                String line;
-                int skipped = 0;
-                while ((line = reader.readLine()) != null) {
-                    if (skipped < count) {
-                        skipped++;
-                        continue;
-                    }
-                    remaining.add(line);
-                }
-            }
-
-            if (remaining.isEmpty()) {
-                if (!file.delete()) {
-                    Log.w(TAG, "Unable to delete: " + file.getAbsolutePath());
-                }
-                return;
-            }
-
-            try (BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(new FileOutputStream(file, false), StandardCharsets.UTF_8))) {
-                for (String line : remaining) {
-                    writer.write(line);
-                    writer.newLine();
-                }
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to trim pending store: " + e.getMessage());
-        }
-    }
-
-    @NonNull
-    private static List<String> readAllLines(@Nullable File file) {
-        final List<String> lines = new ArrayList<>();
-        if (file == null || !file.exists()) {
-            return lines;
-        }
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-                    lines.add(line);
-                }
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to read pending store: " + e.getMessage());
-        }
-
-        return lines;
     }
 }
