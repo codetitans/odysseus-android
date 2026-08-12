@@ -16,47 +16,33 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Owns the in-memory queue of pre-serialized JSON entries waiting to be uploaded, and - when
  * constructed with a write-ahead file - their durable backing on disk.
  * <p>
- * Entries are persisted to that file in batches, not one write per {@link #add}/{@link #addAll}
- * call (that would mean one disk write per log line), and are only removed from it once their
- * batch has been confirmed uploaded via {@link #confirmSent}. That way, entries survive the
- * process dying (crash, kill, no network) before a batch could be sent - the next
- * {@code OdysseusStore} constructed against the same file (i.e. on the next app launch) picks them
- * back up automatically.
+ * Disk is only touched when it's actually needed: {@link #takeBatch} hands a snapshot straight out
+ * of memory, with no write beforehand. If the upload succeeds, {@link #confirmSent} is a no-op for
+ * a batch that never touched disk - on a healthy connection, entries can go from {@link #add} to
+ * "successfully delivered" without a single disk write. Only {@link #requeue} (the upload failed)
+ * and {@link #persistNow} (a crash was detected - there's no time left for a normal upload cycle)
+ * actually write anything, and only what isn't already durable.
  * <p>
- * Persistence is coalesced two ways: a short debounce ({@link #PERSIST_DEBOUNCE_MILLIS}) batches
- * bursts of adds into a single write, and {@link #takeBatch} always persists whatever's still
- * unwritten right before handing a batch off for upload - so the on-disk copy is never more than
- * one short debounce (or one upload cycle, whichever is sooner) behind memory. A size-based
- * fallback ({@link #PERSIST_MAX_BUFFERED}) also forces an early write if a burst of adds outruns
- * the debounce, bounding both memory use and the worst-case loss window.
+ * Entries are only removed from the file once their batch has been confirmed uploaded via
+ * {@link #confirmSent}. That way, entries survive the process dying (crash, kill, no network)
+ * after being persisted - the next {@code OdysseusStore} constructed against the same file (i.e.
+ * on the next app launch) picks them back up automatically.
  * <p>
  * This class only manages storage - it knows nothing about the network. Callers hand a batch off
  * via {@link #takeBatch} and report the outcome back via {@link #confirmSent} or {@link #requeue}.
  */
 final class OdysseusStore {
     private static final String TAG = "OdysseusStore";
-    private static final long PERSIST_DEBOUNCE_MILLIS = 2_000;
-    private static final int PERSIST_MAX_BUFFERED = 200;
-
-    private static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor(runnable -> {
-        final Thread thread = new Thread(runnable, "OdysseusStore");
-        thread.setDaemon(true);
-        return thread;
-    });
 
     private final Object lock = new Object();
     private final List<String> entries = new ArrayList<>();
     @Nullable
     private final File walFile;
-    private boolean persistScheduled;
     // entries[0, persistedCount) are already durably written to walFile; the rest is only in memory.
     private int persistedCount;
 
@@ -65,7 +51,7 @@ final class OdysseusStore {
 
         // Recover anything left over from a previous process (crash, kill, no network, ...) - this
         // is the only place recovery needs to happen, since from here on the file and the
-        // in-memory queue are always kept in lock-step by add()/addAll()/takeBatch()/requeue().
+        // in-memory queue are always kept in lock-step by takeBatch()/confirmSent()/requeue()/persistNow().
         final List<String> recovered = readAllLines(walFile);
         if (!recovered.isEmpty()) {
             Log.i(TAG, "Recovered " + recovered.size() + " unsent entries from a previous session");
@@ -79,7 +65,6 @@ final class OdysseusStore {
     void add(@NonNull String json) {
         synchronized (lock) {
             entries.add(json);
-            onEntriesAdded();
         }
     }
 
@@ -90,7 +75,6 @@ final class OdysseusStore {
 
         synchronized (lock) {
             entries.addAll(items);
-            onEntriesAdded();
         }
     }
 
@@ -104,88 +88,89 @@ final class OdysseusStore {
     }
 
     /**
-     * Snapshots everything currently buffered (persisting any not-yet-written entries first) and
-     * clears the in-memory queue, handing ownership of that batch to the caller until it reports
-     * back via {@link #confirmSent} or {@link #requeue}. Entries added while the batch is still
-     * outstanding accumulate separately and are unaffected.
+     * Snapshots everything currently buffered - without touching disk - and clears the in-memory
+     * queue, handing ownership of that batch to the caller until it reports back via
+     * {@link #confirmSent} or {@link #requeue}. Entries added while the batch is still outstanding
+     * accumulate separately and are unaffected.
      */
     @NonNull
-    List<String> takeBatch() {
+    TakenBatch takeBatch() {
         synchronized (lock) {
-            persistPending();
-
             final List<String> batch = new ArrayList<>(entries);
+            final int batchPersistedCount = persistedCount;
             entries.clear();
             persistedCount = 0;
-            return batch;
+            return new TakenBatch(batch, batchPersistedCount);
         }
     }
 
     /**
-     * Reports that a batch obtained from {@link #takeBatch} was successfully uploaded, so it can
-     * be dropped from the durable store.
+     * Reports that a batch obtained from {@link #takeBatch} was successfully uploaded. If it never
+     * touched disk (the common case on a healthy connection), this is a no-op; otherwise it drops
+     * the now-confirmed prefix from the durable store.
      */
-    void confirmSent(@NonNull List<String> batch) {
+    void confirmSent(@NonNull TakenBatch batch) {
+        if (batch.persistedCount <= 0) {
+            return;
+        }
+
         synchronized (lock) {
-            // Only the first batch.size() lines belong to this batch - anything appended to the
-            // file (by add()/addAll(), via persistPending()) while the upload was in flight must
-            // be kept.
-            removeFirstLines(walFile, batch.size());
+            removeFirstLines(walFile, batch.persistedCount);
         }
     }
 
     /**
-     * Reports that a batch obtained from {@link #takeBatch} failed to upload, so it's put back at
-     * the front of the queue for a later retry.
+     * Reports that a batch obtained from {@link #takeBatch} failed to upload: persists whatever
+     * part of it isn't already durable, then puts the whole batch back at the front of the queue
+     * for a later retry.
      */
-    void requeue(@NonNull List<String> batch) {
+    void requeue(@NonNull TakenBatch batch) {
         synchronized (lock) {
-            // The WAL file already holds it (takeBatch()'s persistPending() guaranteed that) plus
-            // anything added meanwhile, so the file itself needs no change - just extend the
-            // persisted prefix to cover the entries we're putting back in front of it.
-            entries.addAll(0, batch);
-            persistedCount += batch.size();
+            if (batch.persistedCount < batch.items.size()) {
+                appendLines(walFile, batch.items.subList(batch.persistedCount, batch.items.size()));
+            }
+
+            entries.addAll(0, batch.items);
+            persistedCount = batch.items.size();
         }
     }
 
-    // must be called while already holding `lock`
-    private void onEntriesAdded() {
-        if (entries.size() - persistedCount >= PERSIST_MAX_BUFFERED) {
-            // a burst outran the debounce below - write now rather than let unpersisted entries
-            // (and the loss window they represent) grow unbounded
-            persistPending();
-        } else {
-            schedulePersist();
-        }
-    }
-
-    // must be called while already holding `lock`
-    private void schedulePersist() {
-        if (!persistScheduled) {
-            persistScheduled = true;
-            EXECUTOR.schedule(this::persistPendingTick, PERSIST_DEBOUNCE_MILLIS, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void persistPendingTick() {
+    /**
+     * Forces everything currently buffered to disk right now, regardless of upload state. Meant to
+     * be called from a crash handler, where there's no time left to wait for a normal upload cycle.
+     */
+    void persistNow() {
         synchronized (lock) {
-            persistScheduled = false;
-            persistPending();
+            if (persistedCount < entries.size()) {
+                appendLines(walFile, entries.subList(persistedCount, entries.size()));
+                persistedCount = entries.size();
+            }
         }
     }
 
-    // must be called while already holding `lock`
-    private void persistPending() {
-        if (persistedCount < entries.size()) {
-            appendLines(walFile, entries.subList(persistedCount, entries.size()));
-            persistedCount = entries.size();
+    /**
+     * A batch of entries taken via {@link #takeBatch}, along with how many of its leading entries
+     * were already durable on disk at the time it was taken.
+     */
+    static final class TakenBatch {
+        @NonNull
+        final List<String> items;
+        final int persistedCount;
+
+        TakenBatch(@NonNull List<String> items, int persistedCount) {
+            this.items = items;
+            this.persistedCount = persistedCount;
+        }
+
+        boolean isEmpty() {
+            return items.isEmpty();
         }
     }
 
     // --- Write-ahead file persistence, so unsent entries survive the process dying -----------
 
     private static void appendLines(@Nullable File file, @NonNull List<String> lines) {
-        if (file == null) {
+        if (file == null || lines.isEmpty()) {
             return;
         }
 

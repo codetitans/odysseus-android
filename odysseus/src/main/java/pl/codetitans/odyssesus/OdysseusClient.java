@@ -341,6 +341,17 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
             } catch (Throwable ignored) {
                 // never let crash-reporting itself crash the crash handler
             } finally {
+                // Everything still only in memory - the crash entry just added above, plus
+                // whatever else was queued but hadn't failed an upload (and so was never
+                // persisted) yet - must hit disk now: there's no time left for a normal upload
+                // cycle once we return from here.
+                try {
+                    logs.persistPendingNow();
+                    events.persistPendingNow();
+                } catch (Throwable ignored) {
+                    // as above - never let crash-reporting itself crash the crash handler
+                }
+
                 if (previousCrashHandler != null) {
                     previousCrashHandler.uncaughtException(thread, error);
                 } else {

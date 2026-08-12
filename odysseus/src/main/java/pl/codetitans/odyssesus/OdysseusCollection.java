@@ -79,6 +79,15 @@ final class OdysseusCollection {
         scheduleFlush();
     }
 
+    /**
+     * Forces everything currently buffered to durable storage right now, bypassing the normal
+     * "only persist if the upload didn't go through" flow. Meant to be called from a crash
+     * handler, where there's no time left for a normal upload cycle.
+     */
+    void persistPendingNow() {
+        store.persistNow();
+    }
+
     private void scheduleFlush() {
         synchronized (lock) {
             if (!scheduled) {
@@ -93,16 +102,17 @@ final class OdysseusCollection {
             scheduled = false;
         }
 
-        final List<String> toUpload = store.takeBatch();
-        if (toUpload.isEmpty()) {
+        final OdysseusStore.TakenBatch batch = store.takeBatch();
+        if (batch.isEmpty()) {
             return;
         }
 
-        if (upload(toUpload)) {
-            store.confirmSent(toUpload);
+        if (upload(batch.items)) {
+            // never touched disk on a healthy connection - store.confirmSent() is a no-op then
+            store.confirmSent(batch);
         } else {
-            // retried on a later flush - store already knows how to put it back durably
-            store.requeue(toUpload);
+            // retried on a later flush - store persists whatever wasn't already durable
+            store.requeue(batch);
         }
 
         if (store.hasPending()) {
