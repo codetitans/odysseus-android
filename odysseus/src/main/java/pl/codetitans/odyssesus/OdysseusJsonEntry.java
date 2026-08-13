@@ -7,4 +7,14 @@ import androidx.annotation.NonNull;
  */
 interface OdysseusJsonEntry {
     void writeJson(@NonNull StringBuilder sb);
+
+    /**
+     * Gets a JSON representation of this object.
+     */
+    @NonNull
+    default String toJsonString() {
+        final StringBuilder sb = new StringBuilder();
+        writeJson(sb);
+        return sb.toString();
+    }
 }

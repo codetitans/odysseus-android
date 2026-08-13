@@ -219,7 +219,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
             return null;
         }
 
-        this.logs.add(toJson(entry));
+        this.logs.add(entry.toJsonString());
         return entry;
     }
 
@@ -238,7 +238,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
 
         final OdysseusLogEntry entry = new OdysseusLogEntry(message, getSessionId(), severity, tag, getPlatform(),
                 file, method, line, thread, threadName, getUser(), timestamp, context);
-        this.logs.add(toJson(entry));
+        this.logs.add(entry.toJsonString());
         return entry;
     }
 
@@ -254,7 +254,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         for (OdysseusLogEntry entry : entries) {
             if (entry.getSeverity() >= minSeverity.getValue()) {
                 accepted.add(entry);
-                json.add(toJson(entry));
+                json.add(entry.toJsonString());
             }
         }
 
@@ -267,7 +267,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      */
     @NonNull
     public OdysseusEventEntry add(@NonNull OdysseusEventEntry event) {
-        this.events.add(toJson(event));
+        this.events.add(event.toJsonString());
         return event;
     }
 
@@ -283,7 +283,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
 
         final OdysseusEventEntry event = new OdysseusEventEntry(id != null ? id : UUID.randomUUID(),
                 name, getPlatform(), getSessionId(), type, streamId, position, getUser(), timestamp, data, meta);
-        this.events.add(toJson(event));
+        this.events.add(event.toJsonString());
         return event;
     }
 
@@ -294,7 +294,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public List<OdysseusEventEntry> addAllEvents(@NonNull List<OdysseusEventEntry> events) {
         final List<String> json = new ArrayList<>();
         for (OdysseusEventEntry event : events) {
-            json.add(toJson(event));
+            json.add(event.toJsonString());
         }
 
         this.events.addAll(json);
@@ -443,13 +443,6 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
             base = context.getFilesDir();
         }
         return new File(base, PENDING_STORE_DIR);
-    }
-
-    @NonNull
-    private static String toJson(@NonNull OdysseusJsonEntry entry) {
-        final StringBuilder sb = new StringBuilder();
-        entry.writeJson(sb);
-        return sb.toString();
     }
 
     @NonNull
