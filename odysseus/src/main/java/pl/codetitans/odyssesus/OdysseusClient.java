@@ -33,7 +33,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     static final String KEY_EXCEPTION = "exception";
 
     public static final int DEFAULT_MAX_ENTRIES = 2_000;
-    private static final String PENDING_STORE_DIR = "odysseus-pending";
+    private static final String PENDING_STORE_DIR = "odysseus";
 
     private UUID sessionId;
     private final OdysseusCollection logs;
