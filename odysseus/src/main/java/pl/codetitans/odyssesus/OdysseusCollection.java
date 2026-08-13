@@ -30,6 +30,7 @@ final class OdysseusCollection {
     private static final String DEFAULT_HOST = "https://odysseus.codetitans.dev";
     private static final int CONNECT_TIMEOUT_MILLIS = 15_000;
     private static final int READ_TIMEOUT_MILLIS = 15_000;
+    private static final int MAX_BACKOFF_DELAY_SECONDS = 3 * 60;
 
     private static final ScheduledExecutorService EXECUTOR = Executors.newSingleThreadScheduledExecutor(runnable -> {
         final Thread thread = new Thread(runnable, "OdysseusUploader");
@@ -42,6 +43,11 @@ final class OdysseusCollection {
     private final URL baseUrl;
     private final String endPoint;
     private final int delaySeconds;
+    private final int maxDelaySeconds;
+    // Doubles on every failed upload (no connectivity, ...) up to maxDelaySeconds, so a prolonged
+    // outage doesn't keep hammering the network on the original cadence; reset back to
+    // delaySeconds as soon as an upload succeeds again.
+    private int currentDelaySeconds;
     private boolean scheduled;
 
     OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walFile, int maxEntries) {
@@ -57,6 +63,9 @@ final class OdysseusCollection {
 
         this.endPoint = endPoint;
         this.delaySeconds = Math.max(delaySeconds, 1);
+        // never cap backoff below the configured base delay, in case that's already > 1 minute
+        this.maxDelaySeconds = Math.max(this.delaySeconds, MAX_BACKOFF_DELAY_SECONDS);
+        this.currentDelaySeconds = this.delaySeconds;
         this.store = new OdysseusStore(walFile, maxEntries);
 
         // pick up anything the store recovered from a previous session
@@ -92,7 +101,7 @@ final class OdysseusCollection {
         synchronized (lock) {
             if (!scheduled) {
                 scheduled = true;
-                EXECUTOR.schedule(this::flush, delaySeconds, TimeUnit.SECONDS);
+                EXECUTOR.schedule(this::flush, currentDelaySeconds, TimeUnit.SECONDS);
             }
         }
     }
@@ -110,9 +119,18 @@ final class OdysseusCollection {
         if (upload(batch.items)) {
             // never touched disk on a healthy connection - store.confirmSent() is a no-op then
             store.confirmSent(batch);
+            synchronized (lock) {
+                currentDelaySeconds = delaySeconds;
+            }
         } else {
             // retried on a later flush - store persists whatever wasn't already durable
             store.requeue(batch);
+            final int nextDelaySeconds;
+            synchronized (lock) {
+                currentDelaySeconds = Math.min(currentDelaySeconds * 2, maxDelaySeconds);
+                nextDelaySeconds = currentDelaySeconds;
+            }
+            Log.w(TAG, "Upload failed, backing off to " + nextDelaySeconds + "s before the next attempt");
         }
 
         if (store.hasPending()) {
