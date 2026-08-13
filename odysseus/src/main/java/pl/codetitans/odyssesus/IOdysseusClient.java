@@ -51,4 +51,12 @@ public interface IOdysseusClient {
      */
     @NonNull
     Map<String, Object> captureDeviceInfo(@Nullable Map<String, Object> extra);
+
+    /**
+     * Forces every not-yet-uploaded log entry and event currently held only in memory to durable
+     * storage right now (a local disk write - no network involved). Safe to call at any time,
+     * including from a background/UI-hidden lifecycle callback, since it never blocks on I/O for
+     * long or throws.
+     */
+    void persistPending();
 }

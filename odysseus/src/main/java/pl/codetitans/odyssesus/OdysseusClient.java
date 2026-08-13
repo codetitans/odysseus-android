@@ -1,6 +1,10 @@
 package pl.codetitans.odyssesus;
 
+import android.app.Application;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
+import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Process;
 import android.util.Log;
 
@@ -39,6 +43,8 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     private Thread.UncaughtExceptionHandler installedCrashHandler;
     @Nullable
     private Thread.UncaughtExceptionHandler previousCrashHandler;
+    @Nullable
+    private ComponentCallbacks2 installedTrimCallback;
 
     /**
      * Initializes the instance to connect as given application.
@@ -74,7 +80,12 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * {@code appKey} - including across app restarts after a crash or lost network connection.
      * Also installs an uncaught-exception handler that logs the crash (with stack trace) as a
      * {@link LogSeverity#CRITICAL} entry before chaining to whatever handler was previously
-     * installed, so no crash goes unrecorded.
+     * installed, so no crash goes unrecorded. And - when {@code context} is (or resolves to) an
+     * {@link Application} - registers a callback that persists everything still only in memory as
+     * soon as the app's UI goes to the background, so a "regular" close (task swiped away, the
+     * process later killed by the OS) doesn't silently lose entries either, the way an unhandled
+     * exception is already covered. Call {@link #persistPending()} yourself for extra safety at
+     * any other point you consider risky.
      */
     public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey) {
         this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_MAX_ENTRIES);
@@ -116,13 +127,14 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         // The application context, never whatever short-lived Activity/Service context was passed
         // in, so this can't leak - it's only used later for captureAppInfo()/captureDeviceInfo().
         final Context applicationContext = context != null ? context.getApplicationContext() : null;
-        this.appContext = applicationContext != null ? applicationContext : context;
+        this.appContext = applicationContext != null ? applicationContext.getApplicationContext() : context;
         this.sessionId = UUID.randomUUID();
         this.platform = platform;
         this.minSeverity = minSeverity;
 
         if (context != null) {
             installCrashHandler();
+            installBackgroundPersistHook();
         }
     }
 
@@ -365,6 +377,22 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         return info;
     }
 
+    /**
+     * Forces every not-yet-uploaded log entry and event currently held only in memory to durable
+     * storage right now (a local disk write - no network involved). A no-op if this client was
+     * constructed without a {@code Context} (nothing durable to write to).
+     * <p>
+     * This already happens automatically on a crash and (when constructed with an
+     * {@link Application}) when the app's UI goes to the background - see
+     * {@link #OdysseusClient(Context, String, String)}. Call this yourself for extra safety at any
+     * other point you consider risky, e.g. right before intentionally killing the process.
+     */
+    @Override
+    public void persistPending() {
+        logs.persistPendingNow();
+        events.persistPendingNow();
+    }
+
     @NonNull
     private static Map<String, Object> missingContext(@NonNull String method) {
         Log.w(TAG, method + "() called without a Context - construct the client with a Context to capture this");
@@ -379,12 +407,18 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     }
 
     /**
-     * Restores whatever uncaught-exception handler was installed before this client's, if this
-     * client is still the currently active one. Called by {@link OdysseusFactory#stop()}.
+     * Restores whatever uncaught-exception handler was installed before this client's (if this
+     * client is still the currently active one) and unregisters the background-persist callback
+     * installed by {@link #installBackgroundPersistHook()}, if any. Called by
+     * {@link OdysseusFactory#stop()}.
      */
     void shutdown() {
         if (installedCrashHandler != null && Thread.getDefaultUncaughtExceptionHandler() == installedCrashHandler) {
             Thread.setDefaultUncaughtExceptionHandler(previousCrashHandler);
+        }
+
+        if (installedTrimCallback != null && appContext instanceof Application) {
+            appContext.unregisterComponentCallbacks(installedTrimCallback);
         }
     }
 
@@ -429,11 +463,52 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         Thread.setDefaultUncaughtExceptionHandler(installedCrashHandler);
     }
 
+    /**
+     * Registers a callback that persists everything still only in memory as soon as the app's UI
+     * goes to the background ({@link ComponentCallbacks2#TRIM_MEMORY_UI_HIDDEN}) or the system
+     * reports low memory - the two most common precursors to the process being killed without an
+     * exception ever being thrown, so {@link #installCrashHandler()} alone wouldn't catch them.
+     * A no-op unless {@link #appContext} is (or resolves to) an {@link Application} - only that
+     * type can register process-wide component callbacks.
+     */
+    private void installBackgroundPersistHook() {
+        if (!(appContext instanceof Application)) {
+            return;
+        }
+
+        installedTrimCallback = new ComponentCallbacks2() {
+            @Override
+            public void onTrimMemory(int level) {
+                if (level >= TRIM_MEMORY_UI_HIDDEN) {
+                    persistPending();
+                }
+            }
+
+            @Override
+            public void onConfigurationChanged(@NonNull Configuration newConfig) {
+                // nothing to do
+            }
+
+            // onLowMemory() is deprecated in favor of onTrimMemory(), which we already handle
+            // above - required override, since ComponentCallbacks2 extends ComponentCallbacks.
+            @Override
+            @SuppressWarnings("deprecation")
+            public void onLowMemory() {
+                // no-op: onTrimMemory() already covers this
+            }
+        };
+        ((Application) appContext).registerComponentCallbacks(installedTrimCallback);
+    }
+
     // Thread.getId() is deprecated in favor of threadId(), but that replacement only exists from
     // API 35 - minSdk here is 23, so the deprecated call is the only option and is deliberate.
     @SuppressWarnings("deprecation")
     private static long threadId(@NonNull Thread thread) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            return thread.threadId();
+        } else {
         return thread.getId();
+        }
     }
 
     @NonNull
