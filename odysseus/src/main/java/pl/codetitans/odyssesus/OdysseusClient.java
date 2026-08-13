@@ -30,10 +30,13 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     public static final int DEFAULT_DELAY_SECONDS = 5;
     public static final short DEFAULT_PLATFORM = 7;
 
-    static final String KEY_EXCEPTION = "exception";
+    public static final String KEY_EXCEPTION = "exception";
 
     public static final int DEFAULT_ENTRIES_PER_FILE = 200;
     public static final int DEFAULT_MAX_FILES = 100;
+    public static final LogSeverity DEFAULT_MIN_SEVERITY = LogSeverity.DEBUG;
+    public static final String DEFAULT_ENCODING = "UTF-8";
+
     private static final String PENDING_STORE_DIR = "odysseus";
 
     private UUID sessionId;
@@ -59,7 +62,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * persist unsubmitted entries to disk and automatically retry them on the next launch.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey) {
-        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, DEFAULT_MIN_SEVERITY, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -67,7 +70,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * {@link #OdysseusClient(String, String)}.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform) {
-        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, DEFAULT_MIN_SEVERITY, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -93,14 +96,14 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * any other point you consider risky.
      */
     public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey) {
-        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, DEFAULT_MIN_SEVERITY, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
      * Initializes the instance to connect as given application. See {@link #OdysseusClient(Context, String, String)}.
      */
     public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey, short platform) {
-        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, DEFAULT_MIN_SEVERITY, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -530,7 +533,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
                 // no-op: onTrimMemory() already covers this
             }
         };
-        ((Application) appContext).registerComponentCallbacks(installedTrimCallback);
+        appContext.registerComponentCallbacks(installedTrimCallback);
     }
 
     // Thread.getId() is deprecated in favor of threadId(), but that replacement only exists from
@@ -540,7 +543,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
             return thread.threadId();
         } else {
-        return thread.getId();
+            return thread.getId();
         }
     }
 
@@ -571,7 +574,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     @NonNull
     private static String encode(@NonNull String value) {
         try {
-            return URLEncoder.encode(value, "UTF-8");
+            return URLEncoder.encode(value, DEFAULT_ENCODING);
         } catch (UnsupportedEncodingException e) {
             throw new OdysseusException("Failed to encode value: " + value, e);
         }
