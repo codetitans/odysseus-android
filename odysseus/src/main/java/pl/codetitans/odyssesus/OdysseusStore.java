@@ -14,65 +14,85 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Owns the in-memory queue of pre-serialized JSON entries waiting to be uploaded, and - when
- * constructed with a write-ahead file - their durable backing on disk.
+ * Owns the queue of pre-serialized JSON entries waiting to be uploaded, and - when constructed
+ * with a write-ahead directory - their durable backing on disk, split across multiple small chunk
+ * files instead of one ever-growing file.
  * <p>
- * Disk is only touched when it's actually needed: {@link #takeBatch} hands a snapshot straight out
- * of memory, with no write beforehand. If the upload succeeds, {@link #confirmSent} is a no-op for
- * a batch that never touched disk - on a healthy connection, entries can go from {@link #add} to
- * "successfully delivered" without a single disk write. Only {@link #requeue} (the upload failed)
- * and {@link #persistNow} (a crash was detected - there's no time left for a normal upload cycle)
- * actually write anything, and only what isn't already durable.
- * <p>
- * Entries are only removed from the file once their batch has been confirmed uploaded via
- * {@link #confirmSent}. That way, entries survive the process dying (crash, kill, no network)
- * after being persisted - the next {@code OdysseusStore} constructed against the same file (i.e.
- * on the next app launch) picks them back up automatically.
+ * At any time there's at most one "active" chunk, held only in memory, that new entries are
+ * appended to. Once it reaches {@code entriesPerFile} entries it's written to disk in one go,
+ * registered as a "closed" chunk (only its file identity is kept in memory from then on - never
+ * its content), and a fresh empty active chunk takes over. This means:
+ * <ul>
+ *     <li>only ever up to {@code entriesPerFile} entries sit in memory at once, no matter how big
+ *     the backlog on disk gets;</li>
+ *     <li>closed chunks are written exactly once and never rewritten - a long outage with entries
+ *     still streaming in keeps producing new, small, one-shot writes instead of repeatedly
+ *     rewriting a single growing file;</li>
+ *     <li>{@link #takeBatch} still hands the active chunk straight out of memory with no write
+ *     beforehand (see {@link #confirmSent}) - on a healthy connection, nothing needs to touch disk
+ *     at all, exactly as before chunking was introduced.</li>
+ * </ul>
+ * At most {@code maxFiles} closed chunks are ever kept - if closing a new one would exceed that,
+ * the oldest chunk (and its up-to-{@code entriesPerFile} entries) is dropped first. Total capacity
+ * is therefore {@code entriesPerFile * maxFiles} entries.
  * <p>
  * This class only manages storage - it knows nothing about the network. Callers hand a batch off
- * via {@link #takeBatch} and report the outcome back via {@link #confirmSent} or {@link #requeue}.
- * <p>
- * At most {@code maxEntries} entries are ever held (in memory and on disk combined) - if adding
- * more would exceed that, the oldest entries are dropped to make room, so a very long stretch
- * without a connection can't grow the pending queue (or the file backing it) without bound.
+ * via {@link #takeBatch} (always the oldest available data first) and report the outcome back via
+ * {@link #confirmSent} or {@link #requeue}.
  */
 final class OdysseusStore {
     private static final String TAG = "OdysseusStore";
+    private static final String CHUNK_FILE_SUFFIX = ".jsonl";
 
     private final Object lock = new Object();
-    private final List<String> entries = new ArrayList<>();
     @Nullable
-    private final File walFile;
-    private final int maxEntries;
-    // entries[0, persistedCount) are already durably written to walFile; the rest is only in memory.
-    private int persistedCount;
+    private final File walDir;
+    private final int entriesPerFile;
+    private final int maxFiles;
 
-    OdysseusStore(@Nullable File walFile, int maxEntries) {
-        this.walFile = walFile;
-        this.maxEntries = Math.max(maxEntries, 1);
+    // The active chunk: entirely in memory until it's closed (rotated out because it reached
+    // entriesPerFile) or an upload attempt needs it durable ahead of that.
+    private final List<String> activeChunk = new ArrayList<>();
+    private int activeChunkPersistedCount;
+    private long activeChunkSequence;
 
-        // Recover anything left over from a previous process (crash, kill, no network, ...) - this
-        // is the only place recovery needs to happen, since from here on the file and the
-        // in-memory queue are always kept in lock-step by takeBatch()/confirmSent()/requeue()/persistNow().
-        final List<String> recovered = readAllLines(walFile);
+    // Closed chunks: fully on disk, not kept in memory - only their file identity, oldest first.
+    private final Deque<Long> closedChunks = new ArrayDeque<>();
+
+    OdysseusStore(@Nullable File walDir, int entriesPerFile, int maxFiles) {
+        this.walDir = walDir;
+        this.entriesPerFile = Math.max(entriesPerFile, 1);
+        this.maxFiles = Math.max(maxFiles, 1);
+
+        // Recover chunk files left over from a previous process (crash, kill, no network, ...).
+        // Every file found is treated as a closed chunk, whether or not it was ever filled to
+        // entriesPerFile - simpler than trying to resume filling a partial one, and still fully
+        // durable. A fresh, empty active chunk starts right after.
+        final List<Long> recovered = listChunkSequences(walDir);
+        long nextSequence = 0;
         if (!recovered.isEmpty()) {
-            Log.i(TAG, "Recovered " + recovered.size() + " unsent entries from a previous session");
+            Log.i(TAG, "Recovered " + recovered.size() + " pending chunk file(s) from a previous session");
             synchronized (lock) {
-                entries.addAll(recovered);
-                persistedCount = recovered.size(); // already on disk - it's where we just read them from
-                enforceLimit();
+                closedChunks.addAll(recovered);
+                evictExcessChunks(); // in case maxFiles was lowered since the last run
             }
+            nextSequence = recovered.get(recovered.size() - 1) + 1;
         }
+        this.activeChunkSequence = nextSequence;
     }
 
     void add(@NonNull String json) {
         synchronized (lock) {
-            entries.add(json);
-            enforceLimit();
+            activeChunk.add(json);
+            rotateIfFull();
         }
     }
 
@@ -82,8 +102,10 @@ final class OdysseusStore {
         }
 
         synchronized (lock) {
-            entries.addAll(items);
-            enforceLimit();
+            for (String item : items) {
+                activeChunk.add(item);
+                rotateIfFull();
+            }
         }
     }
 
@@ -92,105 +114,180 @@ final class OdysseusStore {
      */
     boolean hasPending() {
         synchronized (lock) {
-            return !entries.isEmpty();
+            return !activeChunk.isEmpty() || !closedChunks.isEmpty();
         }
     }
 
     /**
-     * Snapshots everything currently buffered - without touching disk - and clears the in-memory
-     * queue, handing ownership of that batch to the caller until it reports back via
-     * {@link #confirmSent} or {@link #requeue}. Entries added while the batch is still outstanding
-     * accumulate separately and are unaffected.
+     * Hands out the oldest available batch - a closed chunk if one exists, otherwise whatever's
+     * in the active chunk - without touching disk on its own. Ownership passes to the caller until
+     * it reports back via {@link #confirmSent} or {@link #requeue}. Taking the active chunk always
+     * starts a fresh one behind it (with a new identity), so entries added afterward never get
+     * mixed up with this batch.
      */
     @NonNull
     TakenBatch takeBatch() {
         synchronized (lock) {
-            final List<String> batch = new ArrayList<>(entries);
-            final int batchPersistedCount = persistedCount;
-            entries.clear();
-            persistedCount = 0;
-            return new TakenBatch(batch, batchPersistedCount);
+            final Long oldestClosed = closedChunks.peekFirst();
+            if (oldestClosed != null) {
+                return TakenBatch.fromClosedChunk(readAllLines(chunkFile(oldestClosed)), oldestClosed);
+            }
+
+            if (activeChunk.isEmpty()) {
+                return TakenBatch.empty();
+            }
+
+            final List<String> items = new ArrayList<>(activeChunk);
+            final int persisted = activeChunkPersistedCount;
+            final long sequence = activeChunkSequence;
+
+            activeChunk.clear();
+            activeChunkPersistedCount = 0;
+            activeChunkSequence = sequence + 1;
+
+            return TakenBatch.fromActiveChunk(items, sequence, persisted);
         }
     }
 
     /**
      * Reports that a batch obtained from {@link #takeBatch} was successfully uploaded. If it never
-     * touched disk (the common case on a healthy connection), this is a no-op; otherwise it drops
-     * the now-confirmed prefix from the durable store.
+     * touched disk (the common case on a healthy connection), this is a no-op; otherwise its file
+     * is deleted.
      */
     void confirmSent(@NonNull TakenBatch batch) {
-        if (batch.persistedCount <= 0) {
-            return;
-        }
-
         synchronized (lock) {
-            removeFirstLines(walFile, batch.persistedCount);
+            if (batch.fromClosedChunk) {
+                closedChunks.remove(batch.sequence);
+                deleteChunkFile(batch.sequence);
+            } else if (batch.persistedCount > 0) {
+                deleteChunkFile(batch.sequence);
+            }
         }
     }
 
     /**
-     * Reports that a batch obtained from {@link #takeBatch} failed to upload: persists whatever
-     * part of it isn't already durable, then puts the whole batch back at the front of the queue
-     * for a later retry.
+     * Reports that a batch obtained from {@link #takeBatch} failed to upload, so it needs a later
+     * retry. A closed-chunk batch needs no change at all - its file, if still present, is already
+     * exactly where it needs to be, still the oldest thing pending. An active-chunk batch's
+     * sequence was already permanently retired when it was taken, so it can't merge back into
+     * whatever the (now different) active chunk has become in the meantime; instead it's persisted
+     * (whatever part of it wasn't already durable) and registered as its own closed chunk, at the
+     * front since it's the oldest data around.
      */
     void requeue(@NonNull TakenBatch batch) {
         synchronized (lock) {
-            if (batch.persistedCount < batch.items.size()) {
-                appendLines(walFile, batch.items.subList(batch.persistedCount, batch.items.size()));
+            if (batch.fromClosedChunk) {
+                return;
             }
 
-            entries.addAll(0, batch.items);
-            persistedCount = batch.items.size();
-            enforceLimit();
+            if (walDir == null) {
+                // Nothing durable to fall back to - put the actual content straight back into
+                // memory instead of registering a chunk with no file behind it.
+                activeChunk.addAll(0, batch.items);
+                rotateIfFull();
+                return;
+            }
+
+            if (batch.persistedCount < batch.items.size()) {
+                appendLines(chunkFile(batch.sequence), batch.items.subList(batch.persistedCount, batch.items.size()));
+            }
+
+            closedChunks.addFirst(batch.sequence);
+            evictExcessChunks();
+        }
+    }
+
+    /**
+     * Forces the active chunk to disk right now, regardless of upload state - without rotating it
+     * out. Meant to be called from a crash handler or a background-transition hook, where there's
+     * no time left to wait for a normal upload cycle.
+     */
+    void persistNow() {
+        synchronized (lock) {
+            persistActiveChunkLocked();
         }
     }
 
     // must be called while already holding `lock`
-    private void enforceLimit() {
-        final int overflow = entries.size() - maxEntries;
-        if (overflow <= 0) {
+    private void rotateIfFull() {
+        if (walDir == null) {
+            // No disk to hold "closed" chunks on - just cap the total in-memory size directly,
+            // dropping the oldest as needed, the same way a single-buffer store would.
+            final int overflow = activeChunk.size() - entriesPerFile * maxFiles;
+            if (overflow > 0) {
+                activeChunk.subList(0, overflow).clear();
+            }
             return;
         }
 
-        // Drop the oldest `overflow` entries to make room. If any of them were already durably
-        // persisted, trim the same count from the front of the file too, so it stays in lock-step
-        // with memory instead of accumulating entries we've decided to discard.
-        final int droppedPersisted = Math.min(overflow, persistedCount);
-        if (droppedPersisted > 0) {
-            removeFirstLines(walFile, droppedPersisted);
+        if (activeChunk.size() >= entriesPerFile) {
+            closeActiveChunk();
         }
-
-        entries.subList(0, overflow).clear();
-        persistedCount = Math.max(0, persistedCount - overflow);
-
-        Log.w(TAG, "Pending queue exceeded " + maxEntries + " entries - dropped the oldest " + overflow);
     }
 
-    /**
-     * Forces everything currently buffered to disk right now, regardless of upload state. Meant to
-     * be called from a crash handler, where there's no time left to wait for a normal upload cycle.
-     */
-    void persistNow() {
-        synchronized (lock) {
-            if (persistedCount < entries.size()) {
-                appendLines(walFile, entries.subList(persistedCount, entries.size()));
-                persistedCount = entries.size();
+    // must be called while already holding `lock`
+    private void closeActiveChunk() {
+        persistActiveChunkLocked();
+        closedChunks.addLast(activeChunkSequence);
+        activeChunk.clear();
+        activeChunkPersistedCount = 0;
+        activeChunkSequence++;
+        evictExcessChunks();
+    }
+
+    // must be called while already holding `lock`
+    private void persistActiveChunkLocked() {
+        if (activeChunkPersistedCount >= activeChunk.size()) {
+            return;
+        }
+        appendLines(chunkFile(activeChunkSequence), activeChunk.subList(activeChunkPersistedCount, activeChunk.size()));
+        activeChunkPersistedCount = activeChunk.size();
+    }
+
+    // must be called while already holding `lock`
+    private void evictExcessChunks() {
+        while (closedChunks.size() > maxFiles) {
+            final Long oldest = closedChunks.pollFirst();
+            if (oldest != null) {
+                deleteChunkFile(oldest);
+                Log.w(TAG, "Pending chunk limit (" + maxFiles + " files) exceeded - dropped oldest chunk "
+                        + oldest + " (up to " + entriesPerFile + " entries)");
             }
         }
     }
 
     /**
-     * A batch of entries taken via {@link #takeBatch}, along with how many of its leading entries
-     * were already durable on disk at the time it was taken.
+     * A batch of entries taken via {@link #takeBatch}: either a full closed chunk read from disk,
+     * or a snapshot of what the active chunk held (with how much of it, if any, was already
+     * durable at take time).
      */
     static final class TakenBatch {
         @NonNull
         final List<String> items;
+        final long sequence;
+        final boolean fromClosedChunk;
         final int persistedCount;
 
-        TakenBatch(@NonNull List<String> items, int persistedCount) {
+        private TakenBatch(@NonNull List<String> items, long sequence, boolean fromClosedChunk, int persistedCount) {
             this.items = items;
+            this.sequence = sequence;
+            this.fromClosedChunk = fromClosedChunk;
             this.persistedCount = persistedCount;
+        }
+
+        @NonNull
+        static TakenBatch empty() {
+            return new TakenBatch(Collections.emptyList(), -1, false, 0);
+        }
+
+        @NonNull
+        static TakenBatch fromClosedChunk(@NonNull List<String> items, long sequence) {
+            return new TakenBatch(items, sequence, true, items.size());
+        }
+
+        @NonNull
+        static TakenBatch fromActiveChunk(@NonNull List<String> items, long sequence, int persistedCount) {
+            return new TakenBatch(items, sequence, false, persistedCount);
         }
 
         boolean isEmpty() {
@@ -198,7 +295,52 @@ final class OdysseusStore {
         }
     }
 
-    // --- Write-ahead file persistence, so unsent entries survive the process dying -----------
+    // --- Chunk file naming/discovery -----------------------------------------------------------
+
+    @Nullable
+    private File chunkFile(long sequence) {
+        if (walDir == null) {
+            return null;
+        }
+        return new File(walDir, String.format(Locale.US, "%019d%s", sequence, CHUNK_FILE_SUFFIX));
+    }
+
+    private void deleteChunkFile(long sequence) {
+        final File file = chunkFile(sequence);
+        if (file != null && file.exists() && !file.delete()) {
+            Log.w(TAG, "Unable to delete: " + file.getAbsolutePath());
+        }
+    }
+
+    @NonNull
+    private static List<Long> listChunkSequences(@Nullable File dir) {
+        final List<Long> sequences = new ArrayList<>();
+        if (dir == null || !dir.isDirectory()) {
+            return sequences;
+        }
+
+        final File[] files = dir.listFiles();
+        if (files == null) {
+            return sequences;
+        }
+
+        for (File file : files) {
+            final String name = file.getName();
+            if (!name.endsWith(CHUNK_FILE_SUFFIX)) {
+                continue;
+            }
+            try {
+                sequences.add(Long.parseLong(name.substring(0, name.length() - CHUNK_FILE_SUFFIX.length())));
+            } catch (NumberFormatException ignored) {
+                // not one of our chunk files - skip
+            }
+        }
+
+        Collections.sort(sequences);
+        return sequences;
+    }
+
+    // --- Plain single-file I/O helpers ---------------------------------------------------------
 
     private static void appendLines(@Nullable File file, @NonNull List<String> lines) {
         if (file == null || lines.isEmpty()) {
@@ -220,45 +362,6 @@ final class OdysseusStore {
             }
         } catch (IOException e) {
             Log.e(TAG, "Failed to persist pending entries: " + e.getMessage());
-        }
-    }
-
-    private static void removeFirstLines(@Nullable File file, int count) {
-        if (file == null || count <= 0 || !file.exists()) {
-            return;
-        }
-
-        try {
-            final List<String> remaining = new ArrayList<>();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-                String line;
-                int skipped = 0;
-                while ((line = reader.readLine()) != null) {
-                    if (skipped < count) {
-                        skipped++;
-                        continue;
-                    }
-                    remaining.add(line);
-                }
-            }
-
-            if (remaining.isEmpty()) {
-                if (!file.delete()) {
-                    Log.w(TAG, "Unable to delete: " + file.getAbsolutePath());
-                }
-                return;
-            }
-
-            try (BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(new FileOutputStream(file, false), StandardCharsets.UTF_8))) {
-                for (String line : remaining) {
-                    writer.write(line);
-                    writer.newLine();
-                }
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to trim pending store: " + e.getMessage());
         }
     }
 

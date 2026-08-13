@@ -50,11 +50,11 @@ final class OdysseusCollection {
     private int currentDelaySeconds;
     private boolean scheduled;
 
-    OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walFile, int maxEntries) {
-        this(null, endPoint, delaySeconds, walFile, maxEntries);
+    OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walDir, int entriesPerFile, int maxFiles) {
+        this(null, endPoint, delaySeconds, walDir, entriesPerFile, maxFiles);
     }
 
-    OdysseusCollection(@Nullable String host, @NonNull String endPoint, int delaySeconds, @Nullable File walFile, int maxEntries) {
+    OdysseusCollection(@Nullable String host, @NonNull String endPoint, int delaySeconds, @Nullable File walDir, int entriesPerFile, int maxFiles) {
         try {
             this.baseUrl = new URL(host == null || host.isEmpty() ? DEFAULT_HOST : host);
         } catch (MalformedURLException e) {
@@ -66,7 +66,7 @@ final class OdysseusCollection {
         // never cap backoff below the configured base delay, in case that's already > 1 minute
         this.maxDelaySeconds = Math.max(this.delaySeconds, MAX_BACKOFF_DELAY_SECONDS);
         this.currentDelaySeconds = this.delaySeconds;
-        this.store = new OdysseusStore(walFile, maxEntries);
+        this.store = new OdysseusStore(walDir, entriesPerFile, maxFiles);
 
         // pick up anything the store recovered from a previous session
         if (store.hasPending()) {
@@ -111,18 +111,24 @@ final class OdysseusCollection {
             scheduled = false;
         }
 
-        final OdysseusStore.TakenBatch batch = store.takeBatch();
-        if (batch.isEmpty()) {
-            return;
-        }
-
-        if (upload(batch.items)) {
-            // never touched disk on a healthy connection - store.confirmSent() is a no-op then
-            store.confirmSent(batch);
-            synchronized (lock) {
-                currentDelaySeconds = delaySeconds;
+        // Drain everything pending, oldest chunk first, for as long as uploads keep succeeding -
+        // rather than waiting for a fresh scheduled tick per chunk, so a connection coming back
+        // after a long outage catches up immediately instead of trickling out over many minutes.
+        while (true) {
+            final OdysseusStore.TakenBatch batch = store.takeBatch();
+            if (batch.isEmpty()) {
+                return;
             }
-        } else {
+
+            if (upload(batch.items)) {
+                // never touched disk on a healthy connection - store.confirmSent() is a no-op then
+                store.confirmSent(batch);
+                synchronized (lock) {
+                    currentDelaySeconds = delaySeconds;
+                }
+                continue;
+            }
+
             // retried on a later flush - store persists whatever wasn't already durable
             store.requeue(batch);
             final int nextDelaySeconds;
@@ -131,6 +137,7 @@ final class OdysseusCollection {
                 nextDelaySeconds = currentDelaySeconds;
             }
             Log.w(TAG, "Upload failed, backing off to " + nextDelaySeconds + "s before the next attempt");
+            break;
         }
 
         if (store.hasPending()) {

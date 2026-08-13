@@ -44,8 +44,8 @@ public final class OdysseusFactory {
     /**
      * Setup new instance the Odysseus Client. See the in-memory-only caveat on {@link #start(String, String)}.
      */
-    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int maxEntries) {
-        return client = new OdysseusClient(null, appId, appKey, delaySeconds, minSeverity, platform, host, maxEntries);
+    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int entriesPerFile, int maxFiles) {
+        return client = new OdysseusClient(null, appId, appKey, delaySeconds, minSeverity, platform, host, entriesPerFile, maxFiles);
     }
 
     /**
@@ -72,11 +72,13 @@ public final class OdysseusFactory {
     }
 
     /**
-     * Setup new instance of the Odysseus Client, capping the pending queue at {@code maxEntries}
-     * (per log entries and events, counted separately). See {@link #start(Context, String, String)}.
+     * Setup new instance of the Odysseus Client, storing unsubmitted entries as chunk files of up
+     * to {@code entriesPerFile} entries each, keeping at most {@code maxFiles} of them (per log
+     * entries and events, counted separately) - total capacity {@code entriesPerFile * maxFiles}.
+     * See {@link #start(Context, String, String)}.
      */
-    public static synchronized OdysseusClient start(@NonNull Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int maxEntries) {
-        return client = new OdysseusClient(context, appId, appKey, delaySeconds, minSeverity, platform, host, maxEntries);
+    public static synchronized OdysseusClient start(@NonNull Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int entriesPerFile, int maxFiles) {
+        return client = new OdysseusClient(context, appId, appKey, delaySeconds, minSeverity, platform, host, entriesPerFile, maxFiles);
     }
 
     /**

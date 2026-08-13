@@ -32,7 +32,8 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
 
     static final String KEY_EXCEPTION = "exception";
 
-    public static final int DEFAULT_MAX_ENTRIES = 2_000;
+    public static final int DEFAULT_ENTRIES_PER_FILE = 200;
+    public static final int DEFAULT_MAX_FILES = 100;
     private static final String PENDING_STORE_DIR = "odysseus";
 
     private UUID sessionId;
@@ -58,7 +59,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * persist unsubmitted entries to disk and automatically retry them on the next launch.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey) {
-        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_MAX_ENTRIES);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -66,7 +67,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * {@link #OdysseusClient(String, String)}.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey, short platform) {
-        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_MAX_ENTRIES);
+        this(null, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -74,7 +75,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * delay. See the in-memory-only caveat on {@link #OdysseusClient(String, String)}.
      */
     public OdysseusClient(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
-        this(null, appId, appKey, delaySeconds, minSeverity, platform, host, DEFAULT_MAX_ENTRIES);
+        this(null, appId, appKey, delaySeconds, minSeverity, platform, host, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -92,22 +93,23 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * any other point you consider risky.
      */
     public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey) {
-        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_MAX_ENTRIES);
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, DEFAULT_PLATFORM, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
      * Initializes the instance to connect as given application. See {@link #OdysseusClient(Context, String, String)}.
      */
     public OdysseusClient(@NonNull Context context, @NonNull String appId, @NonNull String appKey, short platform) {
-        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_MAX_ENTRIES);
+        this(context, appId, appKey, DEFAULT_DELAY_SECONDS, LogSeverity.DEBUG, platform, null, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
-     * Full-control constructor, using the default of {@link #DEFAULT_MAX_ENTRIES} pending entries.
-     * See {@link #OdysseusClient(Context, String, String, int, LogSeverity, short, String, int)}.
+     * Full-control constructor, using the default of {@link #DEFAULT_ENTRIES_PER_FILE} entries per
+     * chunk file and {@link #DEFAULT_MAX_FILES} chunk files. See
+     * {@link #OdysseusClient(Context, String, String, int, LogSeverity, short, String, int, int)}.
      */
     public OdysseusClient(@Nullable Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
-        this(context, appId, appKey, delaySeconds, minSeverity, platform, host, DEFAULT_MAX_ENTRIES);
+        this(context, appId, appKey, delaySeconds, minSeverity, platform, host, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_FILES);
     }
 
     /**
@@ -117,17 +119,20 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
      * {@link #OdysseusClient(String, String)} (used internally by the no-{@code Context}
      * overloads of this constructor).
      * <p>
-     * {@code maxEntries} caps how many not-yet-uploaded log entries and events (each counted
-     * separately) are ever held in memory/on disk at once - a very long stretch without a
-     * connection drops the oldest ones to make room for new ones, rather than growing without
-     * bound.
+     * Unsubmitted log entries and events (each counted separately) are stored as a sequence of
+     * small chunk files, each holding up to {@code entriesPerFile} entries; only the newest,
+     * still-filling chunk is ever held in memory, everything older lives purely on disk until it's
+     * uploaded. At most {@code maxFiles} chunk files are kept - a very long stretch without a
+     * connection drops the oldest chunk (and its up to {@code entriesPerFile} entries) to make
+     * room for new ones, rather than growing without bound. Total capacity is therefore
+     * {@code entriesPerFile * maxFiles} entries.
      */
-    public OdysseusClient(@Nullable Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int maxEntries) {
+    public OdysseusClient(@Nullable Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int entriesPerFile, int maxFiles) {
         final File storageDir = context != null ? resolveStorageDir(context) : null;
         this.logs = new OdysseusCollection(host, "/api/logs/" + encode(appId) + "/" + encode(appKey), delaySeconds,
-                storageDir != null ? new File(storageDir, "pending-logs.jsonl") : null, maxEntries);
+                storageDir != null ? new File(storageDir, "logs") : null, entriesPerFile, maxFiles);
         this.events = new OdysseusCollection(host, "/api/events/" + encode(appId) + "/" + encode(appKey), delaySeconds,
-                storageDir != null ? new File(storageDir, "pending-events.jsonl") : null, maxEntries);
+                storageDir != null ? new File(storageDir, "events") : null, entriesPerFile, maxFiles);
         // The application context, never whatever short-lived Activity/Service context was passed
         // in, so this can't leak - it's only used later for captureAppInfo()/captureDeviceInfo().
         final Context applicationContext = context != null ? context.getApplicationContext() : null;
