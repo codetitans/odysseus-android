@@ -1,6 +1,6 @@
 #!/bin/sh
 
-version=${1:-0.0.9}
+version=${1:-0.0.10}
 bundle_name=odysseus-$version-bundle.zip
 bundle_path=bundle/pl/codetitans/odysseus/
 repo_path=~/.m2/repository/pl/codetitans/odysseus/$version/
