@@ -34,6 +34,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":odysseus"))
     implementation(libs.activity.ktx)
     implementation(libs.appcompat)
     implementation(libs.constraintlayout)
