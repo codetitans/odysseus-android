@@ -26,8 +26,12 @@ import java.util.UUID;
  */
 public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
     private static final String TAG = "OdysseusClient";
+
     public static final int DEFAULT_DELAY_SECONDS = 5;
     public static final short DEFAULT_PLATFORM = 7;
+
+    static final String KEY_EXCEPTION = "exception";
+
     public static final int DEFAULT_MAX_ENTRIES = 2_000;
     private static final String PENDING_STORE_DIR = "odysseus-pending";
 
@@ -433,7 +437,7 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         installedCrashHandler = (thread, error) -> {
             try {
                 final Map<String, Object> context = new Hashtable<>();
-                context.put("exception", wrap(error));
+                context.put(KEY_EXCEPTION, wrap(error));
 
                 final String message = error.getMessage() != null ? error.getMessage() : error.getClass().getName();
                 add(new OdysseusLogEntry(message, getSessionId(), LogSeverity.CRITICAL, "CRASH", getPlatform(),

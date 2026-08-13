@@ -111,7 +111,7 @@ final class OdysseusLogger implements IOdysseusLog {
         }
 
         final Map<String, Object> context = new HashMap<>();
-        context.put("exception", client.wrap(error));
+        context.put(OdysseusClient.KEY_EXCEPTION, client.wrap(error));
         return context;
     }
 
