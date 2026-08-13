@@ -62,6 +62,9 @@ public interface IOdysseusLog {
     OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data);
 
     @NonNull
+    OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta);
+
+    @NonNull
     OdysseusEventEntry event(@NonNull String name, @Nullable UUID id, int type, @Nullable UUID streamId, int position,
                              @Nullable Date timestamp,
                              @Nullable Map<String, Object> data,

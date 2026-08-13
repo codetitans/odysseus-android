@@ -29,6 +29,12 @@ public interface IOdysseusClient {
                              @Nullable Map<String, Object> meta);
 
     @NonNull
+    OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data);
+
+    @NonNull
+    OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta);
+
+    @NonNull
     List<OdysseusLogEntry> addAllLogs(@NonNull List<OdysseusLogEntry> entries);
 
     @NonNull
@@ -46,11 +52,17 @@ public interface IOdysseusClient {
     @NonNull
     Map<String, Object> captureAppInfo(@Nullable Map<String, Object> extra);
 
+    @NonNull
+    Map<String, Object> captureAppInfo();
+
     /**
      * Captures details about the current device.
      */
     @NonNull
     Map<String, Object> captureDeviceInfo(@Nullable Map<String, Object> extra);
+
+    @NonNull
+    Map<String, Object> captureDeviceInfo();
 
     /**
      * Forces every not-yet-uploaded log entry and event currently held only in memory to durable

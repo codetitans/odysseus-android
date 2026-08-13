@@ -303,6 +303,18 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         return event;
     }
 
+    @NonNull
+    @Override
+    public OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data) {
+        return event(name, null, 0, null, 0, null, data, null);
+    }
+
+    @NonNull
+    @Override
+    public OdysseusEventEntry event(@NonNull String name, @Nullable Map<String, Object> data, @Nullable Map<String, Object> meta) {
+        return event(name, null, 0, null, 0, null, data, meta);
+    }
+
     /**
      * Stores the event entries internally and later on submits it to the cloud, when possible.
      */
@@ -362,6 +374,12 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
         return info;
     }
 
+    @NonNull
+    @Override
+    public Map<String, Object> captureAppInfo() {
+        return captureAppInfo(null);
+    }
+
     /**
      * Captures details about the current device (hardware/OS, screen, memory, storage, battery,
      * ...) - see {@link OdysseusDeviceInfo#captureDeviceInfo}. Requires a {@code Context} to have
@@ -379,6 +397,12 @@ public final class OdysseusClient implements IOdysseusClient, IOdysseusSession {
             info.putAll(extra);
         }
         return info;
+    }
+
+    @NonNull
+    @Override
+    public Map<String, Object> captureDeviceInfo() {
+        return captureDeviceInfo(null);
     }
 
     /**
