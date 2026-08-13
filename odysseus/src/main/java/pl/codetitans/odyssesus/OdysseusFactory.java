@@ -82,6 +82,16 @@ public final class OdysseusFactory {
     }
 
     /**
+     * Setup new instance of the Odysseus Client, storing unsubmitted entries as chunk files of up
+     * to {@code entriesPerFile} entries each, keeping at most {@code maxFiles} of them (per log
+     * entries and events, counted separately) - total capacity {@code entriesPerFile * maxFiles}.
+     * See {@link #start(Context, String, String)}.
+     */
+    public static synchronized OdysseusClient start(@NonNull Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, int entriesPerFile, int maxFiles) {
+        return client = new OdysseusClient(context, appId, appKey, delaySeconds, OdysseusClient.DEFAULT_MIN_SEVERITY, OdysseusClient.DEFAULT_PLATFORM, null, entriesPerFile, maxFiles);
+    }
+
+    /**
      * Releases the instance of Odysseus Client, restoring any uncaught-exception handler it chained in front of.
      */
     public static synchronized void stop() {
