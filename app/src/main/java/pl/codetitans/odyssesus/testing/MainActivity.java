@@ -19,7 +19,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        OdysseusFactory.start(this, "test-app-id", "test-app-key");
+        OdysseusFactory.start(this, "test-app-id", "test-app-key", 1, 2, 3);
         logger = OdysseusFactory.create("MainActivity");
 
         EdgeToEdge.enable(this);
