@@ -302,7 +302,7 @@ final class OdysseusStore {
         if (walDir == null) {
             return null;
         }
-        return new File(walDir, String.format(Locale.US, "%019d%s", sequence, CHUNK_FILE_SUFFIX));
+        return new File(walDir, String.format(Locale.US, "%06d%s", sequence, CHUNK_FILE_SUFFIX));
     }
 
     private void deleteChunkFile(long sequence) {
