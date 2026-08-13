@@ -65,7 +65,9 @@ final class OdysseusDeviceInfo {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     info.put("min_sdk", appInfo.minSdkVersion);
                 }
-                info.put("debuggable", (appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0);
+                final boolean debuggable = (appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+                info.put("debug", debuggable);
+                info.put("build_type", debuggable ? "debug" : "release");
 
                 final CharSequence label = pm.getApplicationLabel(appInfo);
                 if (label != null) {
@@ -104,6 +106,7 @@ final class OdysseusDeviceInfo {
     public static Map<String, Object> captureDeviceInfo(@NonNull Context context) {
         final Map<String, Object> info = new Hashtable<>();
 
+        info.put("platform", "Android");
         info.put("manufacturer", Build.MANUFACTURER);
         info.put("brand", Build.BRAND);
         info.put("model", Build.MODEL);
@@ -118,6 +121,13 @@ final class OdysseusDeviceInfo {
             info.put("codename", Build.VERSION.CODENAME);
         }
         info.put("supported_abis", Arrays.asList(Build.SUPPORTED_ABIS));
+        if (isEmulator()) {
+            info.put("simulator", true);
+            info.put("flavor", "simulator");
+        } else {
+            info.put("emulator", false);
+            info.put("flavor", "device");
+        }
         info.put("locale", Locale.getDefault().toString());
         info.put("timezone", TimeZone.getDefault().getID());
         info.put("available_processors", Runtime.getRuntime().availableProcessors());
@@ -164,6 +174,25 @@ final class OdysseusDeviceInfo {
         }
 
         return info;
+    }
+
+    // No Android API reports "this is an emulator" directly - this is the standard community
+    // heuristic (matched by most well-known crash/analytics SDKs), checking build properties that
+    // emulator images consistently set but real hardware doesn't. Not 100% foolproof against a
+    // deliberately disguised emulator, but reliable enough for diagnostics.
+    private static boolean isEmulator() {
+        return Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || Build.MODEL.contains("google_sdk")
+                || Build.MODEL.contains("Emulator")
+                || Build.MODEL.contains("Android SDK built for")
+                || Build.MANUFACTURER.contains("Genymotion")
+                || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+                || "google_sdk".equals(Build.PRODUCT)
+                || Build.HARDWARE.contains("goldfish")
+                || Build.HARDWARE.contains("ranchu")
+                || Build.PRODUCT.contains("sdk_gphone")
+                || Build.PRODUCT.contains("vbox86p");
     }
 
     @NonNull
