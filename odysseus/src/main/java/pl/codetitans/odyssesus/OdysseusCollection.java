@@ -44,11 +44,11 @@ final class OdysseusCollection {
     private final int delaySeconds;
     private boolean scheduled;
 
-    OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walFile) {
-        this(null, endPoint, delaySeconds, walFile);
+    OdysseusCollection(@NonNull String endPoint, int delaySeconds, @Nullable File walFile, int maxEntries) {
+        this(null, endPoint, delaySeconds, walFile, maxEntries);
     }
 
-    OdysseusCollection(@Nullable String host, @NonNull String endPoint, int delaySeconds, @Nullable File walFile) {
+    OdysseusCollection(@Nullable String host, @NonNull String endPoint, int delaySeconds, @Nullable File walFile, int maxEntries) {
         try {
             this.baseUrl = new URL(host == null || host.isEmpty() ? DEFAULT_HOST : host);
         } catch (MalformedURLException e) {
@@ -57,7 +57,7 @@ final class OdysseusCollection {
 
         this.endPoint = endPoint;
         this.delaySeconds = Math.max(delaySeconds, 1);
-        this.store = new OdysseusStore(walFile);
+        this.store = new OdysseusStore(walFile, maxEntries);
 
         // pick up anything the store recovered from a previous session
         if (store.hasPending()) {

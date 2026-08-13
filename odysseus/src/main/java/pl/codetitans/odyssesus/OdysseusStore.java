@@ -36,23 +36,24 @@ import java.util.List;
  * This class only manages storage - it knows nothing about the network. Callers hand a batch off
  * via {@link #takeBatch} and report the outcome back via {@link #confirmSent} or {@link #requeue}.
  * <p>
- * At most {@link #MAX_ENTRIES} entries are ever held (in memory and on disk combined) - if adding
+ * At most {@code maxEntries} entries are ever held (in memory and on disk combined) - if adding
  * more would exceed that, the oldest entries are dropped to make room, so a very long stretch
  * without a connection can't grow the pending queue (or the file backing it) without bound.
  */
 final class OdysseusStore {
     private static final String TAG = "OdysseusStore";
-    private static final int MAX_ENTRIES = 2_000;
 
     private final Object lock = new Object();
     private final List<String> entries = new ArrayList<>();
     @Nullable
     private final File walFile;
+    private final int maxEntries;
     // entries[0, persistedCount) are already durably written to walFile; the rest is only in memory.
     private int persistedCount;
 
-    OdysseusStore(@Nullable File walFile) {
+    OdysseusStore(@Nullable File walFile, int maxEntries) {
         this.walFile = walFile;
+        this.maxEntries = Math.max(maxEntries, 1);
 
         // Recover anything left over from a previous process (crash, kill, no network, ...) - this
         // is the only place recovery needs to happen, since from here on the file and the
@@ -146,7 +147,7 @@ final class OdysseusStore {
 
     // must be called while already holding `lock`
     private void enforceLimit() {
-        final int overflow = entries.size() - MAX_ENTRIES;
+        final int overflow = entries.size() - maxEntries;
         if (overflow <= 0) {
             return;
         }
@@ -162,7 +163,7 @@ final class OdysseusStore {
         entries.subList(0, overflow).clear();
         persistedCount = Math.max(0, persistedCount - overflow);
 
-        Log.w(TAG, "Pending queue exceeded " + MAX_ENTRIES + " entries - dropped the oldest " + overflow);
+        Log.w(TAG, "Pending queue exceeded " + maxEntries + " entries - dropped the oldest " + overflow);
     }
 
     /**

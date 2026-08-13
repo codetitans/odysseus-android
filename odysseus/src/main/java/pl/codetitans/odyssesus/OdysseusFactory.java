@@ -42,6 +42,13 @@ public final class OdysseusFactory {
     }
 
     /**
+     * Setup new instance the Odysseus Client. See the in-memory-only caveat on {@link #start(String, String)}.
+     */
+    public static synchronized OdysseusClient start(@NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int maxEntries) {
+        return client = new OdysseusClient(null, appId, appKey, delaySeconds, minSeverity, platform, host, maxEntries);
+    }
+
+    /**
      * Setup new instance of the Odysseus Client, persisting unsubmitted log entries and events to
      * disk (under {@code context}'s no-backup storage) and installing an automatic crash handler.
      * See {@link OdysseusClient#OdysseusClient(Context, String, String)}.
@@ -62,6 +69,14 @@ public final class OdysseusFactory {
      */
     public static synchronized OdysseusClient start(@NonNull Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host) {
         return client = new OdysseusClient(context, appId, appKey, delaySeconds, minSeverity, platform, host);
+    }
+
+    /**
+     * Setup new instance of the Odysseus Client, capping the pending queue at {@code maxEntries}
+     * (per log entries and events, counted separately). See {@link #start(Context, String, String)}.
+     */
+    public static synchronized OdysseusClient start(@NonNull Context context, @NonNull String appId, @NonNull String appKey, int delaySeconds, @NonNull LogSeverity minSeverity, short platform, @Nullable String host, int maxEntries) {
+        return client = new OdysseusClient(context, appId, appKey, delaySeconds, minSeverity, platform, host, maxEntries);
     }
 
     /**
