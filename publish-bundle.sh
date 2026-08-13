@@ -17,7 +17,7 @@ generate_checksums() {
   for f in "$dir"/*; do
     [ -f "$f" ] || continue
     case "$f" in
-      *.md5|*.sha1) continue ;;
+      *.md5|*.sha1|*.asc) continue ;;  # .asc signatures are required, but Central doesn't need checksums *of* them
     esac
 
     if command -v md5 >/dev/null 2>&1; then
